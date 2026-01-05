@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CalendarCheck, Users, FileText, Calendar } from "lucide-react"
 import Link from "next/link"
+import { ClockPromptModal } from "@/components/clock-prompt-modal"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -16,6 +17,20 @@ export default async function DashboardPage() {
   }
 
   const { data: userData } = await supabase.from("users").select("*").eq("id", user.id).single()
+
+  // Get today's date
+  const today = new Date().toISOString().split("T")[0]
+
+  // Get today's attendance
+  const { data: todayAttendance } = await supabase
+    .from("attendance")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("date", today)
+    .single()
+
+  // Get company settings
+  const { data: settings } = await supabase.from("company_settings").select("*").single()
 
   // Get current month attendance count
   const currentDate = new Date()
@@ -46,6 +61,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Clock In/Out Prompt Modal */}
+      <ClockPromptModal 
+        attendance={todayAttendance} 
+        settings={settings} 
+        userId={user.id} 
+        today={today} 
+      />
+
       <div>
         <h1 className="text-3xl font-bold text-amber-900">Welcome, {userData?.full_name}!</h1>
         <p className="text-amber-700 mt-2">
