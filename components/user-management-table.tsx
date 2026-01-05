@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Trash2, Edit } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useAlert } from "@/components/ui/alert-custom"
 import type { User } from "@/lib/types"
 
 interface UserManagementTableProps {
@@ -26,6 +27,7 @@ interface UserManagementTableProps {
 }
 
 export function UserManagementTable({ users }: UserManagementTableProps) {
+  const { showAlert, showConfirm } = useAlert()
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
@@ -136,7 +138,8 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
   }
 
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Are you sure you want to delete this user?")) return
+    const confirmed = await showConfirm("Delete User", "Are you sure you want to delete this user?")
+    if (!confirmed) return
 
     try {
       const supabase = createClient()
@@ -148,7 +151,7 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
 
       router.refresh()
     } catch (error: unknown) {
-      alert(error instanceof Error ? error.message : "An error occurred")
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
   }
 

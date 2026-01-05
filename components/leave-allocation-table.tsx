@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Edit, Trash2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { useAlert } from "@/components/ui/alert-custom"
 import type { User, LeaveType, LeaveBalance } from "@/lib/types"
 
 interface LeaveAllocationTableProps {
@@ -33,6 +34,7 @@ export function LeaveAllocationTable({
   leaveBalances,
   currentYear,
 }: LeaveAllocationTableProps) {
+  const { showAlert, showConfirm } = useAlert()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -111,7 +113,8 @@ export function LeaveAllocationTable({
   }
 
   const handleDelete = async (balanceId: string) => {
-    if (!confirm("Are you sure you want to delete this leave allocation?")) return
+    const confirmed = await showConfirm("Delete Allocation", "Are you sure you want to delete this leave allocation?")
+    if (!confirmed) return
 
     setIsLoading(true)
     try {

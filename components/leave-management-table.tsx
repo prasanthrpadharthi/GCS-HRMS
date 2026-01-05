@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Trash2, Check, X, RotateCcw } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { useAlert } from "@/components/ui/alert-custom"
 import type { Leave } from "@/lib/types"
 
 interface LeaveManagementTableProps {
@@ -15,6 +16,7 @@ interface LeaveManagementTableProps {
 }
 
 export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveManagementTableProps) {
+  const { showAlert, showConfirm } = useAlert()
   const router = useRouter()
 
   const getStatusColor = (status: string) => {
@@ -58,7 +60,7 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
       router.refresh()
     } catch (error) {
       console.error("Error approving leave:", error)
-      alert(error instanceof Error ? error.message : "An error occurred")
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
   }
 
@@ -77,12 +79,13 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
       if (error) throw error
       router.refresh()
     } catch (error) {
-      alert(error instanceof Error ? error.message : "An error occurred")
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
   }
 
   const handleDeleteLeave = async (leaveId: string) => {
-    if (!confirm("Are you sure you want to delete this leave?")) return
+    const confirmed = await showConfirm("Delete Leave", "Are you sure you want to delete this leave?")
+    if (!confirmed) return
 
     try {
       const supabase = createClient()
@@ -91,12 +94,13 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
       if (error) throw error
       router.refresh()
     } catch (error: unknown) {
-      alert(error instanceof Error ? error.message : "An error occurred")
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
   }
 
   const handleResetLeave = async (leaveId: string) => {
-    if (!confirm("Reset this leave to pending status?")) return
+    const confirmed = await showConfirm("Reset Leave", "Reset this leave to pending status?")
+    if (!confirmed) return
 
     try {
       const supabase = createClient()
@@ -112,7 +116,7 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
       if (error) throw error
       router.refresh()
     } catch (error) {
-      alert(error instanceof Error ? error.message : "An error occurred")
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
   }
 

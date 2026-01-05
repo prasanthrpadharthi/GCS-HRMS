@@ -45,14 +45,17 @@ export default async function DashboardPage() {
     .lte("date", lastDay.toISOString().split("T")[0])
     .eq("status", "present")
 
-  // Get leaves count (all auto-approved)
-  const { count: leavesCount } = await supabase
+  // Get leaves count and total days (all auto-approved)
+  const { data: leavesData, count: leavesCount } = await supabase
     .from("leaves")
-    .select("*", { count: "exact", head: true })
+    .select("total_days", { count: "exact" })
     .eq("user_id", user.id)
     .gte("from_date", firstDay.toISOString().split("T")[0])
     .lte("to_date", lastDay.toISOString().split("T")[0])
     .eq("status", "approved")
+
+  // Calculate total leave days
+  const totalLeaveDays = leavesData?.reduce((sum, leave) => sum + (leave.total_days || 0), 0) || 0
 
   // Get total users count (admin only)
   let totalUsers = null
@@ -98,7 +101,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-900">{leavesCount || 0}</div>
-            <p className="text-xs text-amber-700 mt-1">This month</p>
+            <p className="text-xs text-amber-700 mt-1">{totalLeaveDays > 0 ? `${totalLeaveDays} day${totalLeaveDays !== 1 ? 's' : ''} this month` : 'This month'}</p>
           </CardContent>
         </Card>
 

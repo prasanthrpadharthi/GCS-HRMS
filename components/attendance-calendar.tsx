@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Trash2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { useAlert } from "@/components/ui/alert-custom"
 
 interface AttendanceCalendarProps {
   attendance: Attendance[]
@@ -14,6 +15,7 @@ interface AttendanceCalendarProps {
 }
 
 export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCalendarProps) {
+  const { showAlert, showConfirm } = useAlert()
   const router = useRouter()
 
   const getStatusColor = (status: string) => {
@@ -55,7 +57,8 @@ export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCal
   )
 
   const handleDeleteAttendance = async (attendanceId: string) => {
-    if (!confirm("Delete this attendance record? You can re-apply attendance or leave after deletion.")) return
+    const confirmed = await showConfirm("Delete Attendance", "Delete this attendance record? You can re-apply attendance or leave after deletion.")
+    if (!confirmed) return
 
     try {
       const supabase = createClient()
@@ -78,7 +81,7 @@ export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCal
       router.refresh()
     } catch (error) {
       console.error("Caught delete error:", error)
-      alert(error instanceof Error ? error.message : "An error occurred")
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
   }
 

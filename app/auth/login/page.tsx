@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { LoadingSpinner } from "@/components/ui/loading"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -126,7 +127,14 @@ export default function LoginPage() {
                     className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
                     disabled={isLoading}
                   >
-                    {isLoading ? "Logging in..." : "Login"}
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <LoadingSpinner />
+                        Logging in...
+                      </span>
+                    ) : (
+                      "Login"
+                    )}
                   </Button>
                 </div>
                 {!enableMockAuth() && (

@@ -10,6 +10,7 @@ import { Trash2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { LoadingSpinner } from "@/components/ui/loading"
+import { useAlert } from "@/components/ui/alert-custom"
 
 interface AdminAttendanceTableProps {
   initialAttendance: Attendance[]
@@ -18,6 +19,7 @@ interface AdminAttendanceTableProps {
 }
 
 export function AdminAttendanceTable({ initialAttendance, initialMonth, initialYear }: AdminAttendanceTableProps) {
+  const { showAlert, showConfirm } = useAlert()
   const [attendance, setAttendance] = useState(initialAttendance)
   const [selectedMonth, setSelectedMonth] = useState(initialMonth.toString())
   const [selectedYear, setSelectedYear] = useState(initialYear.toString())
@@ -115,7 +117,8 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
   }
 
   const handleDeleteAttendance = async (attendanceId: string, userName: string, date: string) => {
-    if (!confirm(`Are you sure you want to delete attendance record for ${userName} on ${date}?`)) return
+    const confirmed = await showConfirm("Delete Attendance", `Are you sure you want to delete attendance record for ${userName} on ${date}?`)
+    if (!confirmed) return
 
     try {
       const supabase = createClient()
@@ -127,7 +130,7 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
       setAttendance(attendance.filter(a => a.id !== attendanceId))
       router.refresh()
     } catch (error: unknown) {
-      alert(error instanceof Error ? error.message : "An error occurred")
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
   }
 

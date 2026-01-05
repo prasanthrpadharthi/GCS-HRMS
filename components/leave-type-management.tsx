@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Plus, Edit, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useAlert } from "@/components/ui/alert-custom"
 import type { LeaveType } from "@/lib/types"
 
 interface LeaveTypeManagementProps {
@@ -25,6 +26,7 @@ interface LeaveTypeManagementProps {
 }
 
 export function LeaveTypeManagement({ leaveTypes }: LeaveTypeManagementProps) {
+  const { showAlert, showConfirm } = useAlert()
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [selectedType, setSelectedType] = useState<LeaveType | null>(null)
@@ -136,7 +138,8 @@ export function LeaveTypeManagement({ leaveTypes }: LeaveTypeManagementProps) {
   }
 
   const handleDeleteLeaveType = async (typeId: string) => {
-    if (!confirm("Are you sure you want to delete this leave type?")) return
+    const confirmed = await showConfirm("Delete Leave Type", "Are you sure you want to delete this leave type?")
+    if (!confirmed) return
 
     try {
       const supabase = createClient()
@@ -146,7 +149,7 @@ export function LeaveTypeManagement({ leaveTypes }: LeaveTypeManagementProps) {
 
       router.refresh()
     } catch (error: unknown) {
-      alert(error instanceof Error ? error.message : "An error occurred")
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
   }
 
