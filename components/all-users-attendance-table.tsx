@@ -91,11 +91,11 @@ export function AllUsersAttendanceTable({ attendance }: AllUsersAttendanceTableP
                 {records.map((record: Attendance) => (
                   <TableRow key={record.id} className="hover:bg-amber-50">
                     <TableCell className="text-amber-900 font-medium">
-                      {new Date(record.date).toLocaleDateString("en-SG", {
+                      {new Date(record.date).toLocaleDateString("en-GB", {
                         weekday: "short",
+                        day: "2-digit",
+                        month: "2-digit",
                         year: "numeric",
-                        month: "short",
-                        day: "numeric",
                       })}
                     </TableCell>
                     <TableCell className="text-amber-900">{formatTime(record.clock_in)}</TableCell>

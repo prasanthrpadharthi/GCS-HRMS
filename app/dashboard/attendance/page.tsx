@@ -90,7 +90,7 @@ export default async function AttendancePage() {
               <CardDescription className="text-amber-700">View your monthly attendance</CardDescription>
             </CardHeader>
             <CardContent>
-              <AttendanceCalendar attendance={monthAttendance || []} leaves={monthLeaves || []} />
+              <AttendanceCalendar attendance={monthAttendance || []} leaves={monthLeaves || []} userId={user.id} />
             </CardContent>
           </Card>
         </div>

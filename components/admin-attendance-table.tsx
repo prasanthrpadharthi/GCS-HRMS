@@ -233,7 +233,7 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
                             onClick={() => handleDeleteAttendance(
                               record.id, 
                               userName, 
-                              new Date(record.date).toLocaleDateString("en-SG")
+                              new Date(record.date).toLocaleDateString("en-GB")
                             )}
                           >
                             <Trash2 className="h-4 w-4" />

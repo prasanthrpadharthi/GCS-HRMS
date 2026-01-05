@@ -175,11 +175,11 @@ export function ClockPromptModal({ attendance, settings, userId, today }: ClockP
               <div className="text-sm text-amber-700 mb-1">Current Time</div>
               <div className="text-2xl font-bold text-amber-900">{formatTime(currentTime)}</div>
               <div className="text-xs text-amber-600 mt-1">
-                {currentTime.toLocaleDateString("en-SG", {
+                {currentTime.toLocaleDateString("en-GB", {
                   weekday: "long",
+                  day: "2-digit",
+                  month: "2-digit",
                   year: "numeric",
-                  month: "long",
-                  day: "numeric",
                 })}
               </div>
             </div>

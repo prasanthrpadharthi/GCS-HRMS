@@ -129,7 +129,6 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
               <TableHead className="text-amber-900">To Date</TableHead>
               <TableHead className="text-amber-900">Duration</TableHead>
               <TableHead className="text-amber-900">Leave Type</TableHead>
-              <TableHead className="text-amber-900">Status</TableHead>
               <TableHead className="text-amber-900">Reason</TableHead>
               <TableHead className="text-amber-900 text-right">Actions</TableHead>
             </TableRow>
@@ -147,20 +146,20 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
                 )}
                 <TableCell className="text-amber-900">
                   <div>
-                    {new Date(leave.from_date).toLocaleDateString("en-SG", {
+                    {new Date(leave.from_date).toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "2-digit",
                       year: "numeric",
-                      month: "short",
-                      day: "numeric",
                     })}
                     <div className="text-xs text-amber-600">{getSessionDisplay(leave.from_session)}</div>
                   </div>
                 </TableCell>
                 <TableCell className="text-amber-900">
                   <div>
-                    {new Date(leave.to_date).toLocaleDateString("en-SG", {
+                    {new Date(leave.to_date).toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "2-digit",
                       year: "numeric",
-                      month: "short",
-                      day: "numeric",
                     })}
                     <div className="text-xs text-amber-600">{getSessionDisplay(leave.to_session)}</div>
                   </div>
@@ -171,60 +170,24 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
                     {leave.leave_type?.name || "N/A"}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  <Badge className={getStatusColor(leave.status)} variant="outline">
-                    {leave.status}
-                  </Badge>
-                </TableCell>
                 <TableCell className="text-amber-900 text-sm max-w-xs">
                   {leave.reason || <span className="text-gray-400 italic">No reason provided</span>}
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
-                    {isAdmin && leave.status === "pending" && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                          onClick={() => handleApproveLeave(leave.id)}
-                          title="Approve"
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleRejectLeave(leave.id)}
-                          title="Reject"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                    {isAdmin && leave.status !== "pending" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                        onClick={() => handleResetLeave(leave.id)}
-                        title="Reset to Pending"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {(!isAdmin && leave.status === "pending") || isAdmin ? (
+                    {isAdmin ? (
                       <Button
                         size="sm"
                         variant="ghost"
                         className="text-red-600 hover:text-red-700"
                         onClick={() => handleDeleteLeave(leave.id)}
-                        title="Delete"
+                        title="Delete Leave"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    ) : null}
+                    ) : (
+                      <span className="text-sm text-amber-600 italic">Contact admin to cancel</span>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

@@ -45,23 +45,14 @@ export default async function DashboardPage() {
     .lte("date", lastDay.toISOString().split("T")[0])
     .eq("status", "present")
 
-  // Get approved leaves count
-  const { count: approvedLeavesCount } = await supabase
+  // Get leaves count (all auto-approved)
+  const { count: leavesCount } = await supabase
     .from("leaves")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id)
     .gte("from_date", firstDay.toISOString().split("T")[0])
     .lte("to_date", lastDay.toISOString().split("T")[0])
     .eq("status", "approved")
-
-  // Get pending leaves count
-  const { count: pendingLeavesCount } = await supabase
-    .from("leaves")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("from_date", firstDay.toISOString().split("T")[0])
-    .lte("to_date", lastDay.toISOString().split("T")[0])
-    .eq("status", "pending")
 
   // Get total users count (admin only)
   let totalUsers = null
@@ -102,23 +93,12 @@ export default async function DashboardPage() {
 
         <Card className="border-amber-200 bg-white/80 backdrop-blur">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-amber-900">Leaves Approved</CardTitle>
+            <CardTitle className="text-sm font-medium text-amber-900">Leaves Taken</CardTitle>
             <Calendar className="h-4 w-4 text-green-700" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-900">{approvedLeavesCount || 0}</div>
+            <div className="text-2xl font-bold text-green-900">{leavesCount || 0}</div>
             <p className="text-xs text-amber-700 mt-1">This month</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-amber-200 bg-white/80 backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-amber-900">Leaves Pending</CardTitle>
-            <Calendar className="h-4 w-4 text-yellow-700" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-900">{pendingLeavesCount || 0}</div>
-            <p className="text-xs text-amber-700 mt-1">Awaiting approval</p>
           </CardContent>
         </Card>
 

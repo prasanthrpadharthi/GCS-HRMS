@@ -96,13 +96,17 @@ export function LeaveTypeManagement({ leaveTypes }: LeaveTypeManagementProps) {
         })
         .eq("id", selectedType.id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        console.error("Leave type update error:", updateError)
+        throw updateError
+      }
 
       setIsEditOpen(false)
       setSelectedType(null)
       resetForm()
       router.refresh()
     } catch (error: unknown) {
+      console.error("Error updating leave type:", error)
       setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
       setIsLoading(false)

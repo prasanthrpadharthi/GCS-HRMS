@@ -2,13 +2,20 @@
 
 import type { Attendance, Leave } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Trash2 } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
 
 interface AttendanceCalendarProps {
   attendance: Attendance[]
   leaves: Leave[]
+  userId: string
 }
 
-export function AttendanceCalendar({ attendance, leaves }: AttendanceCalendarProps) {
+export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCalendarProps) {
+  const router = useRouter()
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "present":
@@ -47,6 +54,23 @@ export function AttendanceCalendar({ attendance, leaves }: AttendanceCalendarPro
     new Date(b.from_date).getTime() - new Date(a.from_date).getTime()
   )
 
+  const handleDeleteAttendance = async (attendanceId: string) => {
+    if (!confirm("Delete this attendance record? You can re-apply attendance or leave after deletion.")) return
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("attendance")
+        .delete()
+        .eq("id", attendanceId)
+
+      if (error) throw error
+      router.refresh()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "An error occurred")
+    }
+  }
+
   return (
     <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
       {sortedAttendance.length === 0 && sortedLeaves.length === 0 ? (
@@ -60,10 +84,11 @@ export function AttendanceCalendar({ attendance, leaves }: AttendanceCalendarPro
             >
               <div className="flex-1">
                 <p className="font-medium text-amber-900">
-                  {new Date(record.date).toLocaleDateString("en-SG", {
+                  {new Date(record.date).toLocaleDateString("en-GB", {
                     weekday: "short",
-                    month: "short",
-                    day: "numeric",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
                   })}
                 </p>
                 <div className="flex gap-2 mt-1 text-xs text-amber-700">
@@ -71,9 +96,20 @@ export function AttendanceCalendar({ attendance, leaves }: AttendanceCalendarPro
                   {record.clock_out && <span>Out: {record.clock_out}</span>}
                 </div>
               </div>
-              <Badge className={getStatusColor(record.status)} variant="outline">
-                {record.status.replace("_", " ")}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge className={getStatusColor(record.status)} variant="outline">
+                  {record.status.replace("_", " ")}
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red-600 hover:text-red-700 h-8 w-8 p-0"
+                  onClick={() => handleDeleteAttendance(record.id)}
+                  title="Delete attendance"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ))}
 
@@ -84,16 +120,18 @@ export function AttendanceCalendar({ attendance, leaves }: AttendanceCalendarPro
             >
               <div className="flex-1">
                 <p className="font-medium text-blue-900">
-                  {new Date(leave.from_date).toLocaleDateString("en-SG", {
+                  {new Date(leave.from_date).toLocaleDateString("en-GB", {
                     weekday: "short",
-                    month: "short",
-                    day: "numeric",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
                   })}
                   {leave.from_date !== leave.to_date && (
-                    <span> - {new Date(leave.to_date).toLocaleDateString("en-SG", {
+                    <span> - {new Date(leave.to_date).toLocaleDateString("en-GB", {
                       weekday: "short",
-                      month: "short",
-                      day: "numeric",
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
                     })}</span>
                   )}
                 </p>

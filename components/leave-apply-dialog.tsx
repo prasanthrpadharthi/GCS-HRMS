@@ -50,14 +50,31 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
   const fetchLeaveTypes = async () => {
     try {
       const supabase = createClient()
-      const { data, error } = await supabase
-        .from("leave_types")
-        .select("*")
-        .eq("is_active", true)
-        .order("name")
+      const currentYear = new Date().getFullYear()
+      
+      // Try to get leave balances with leave types for current user
+      const { data: balances, error: balanceError } = await supabase
+        .from("leave_balances")
+        .select("*, leave_type:leave_types(*)")
+        .eq("user_id", userId)
+        .eq("year", currentYear)
+        .gt("allocated_days", 0) // Only show types with allocation
 
-      if (error) throw error
-      setLeaveTypes(data || [])
+      // If user has allocated balances, use those
+      if (balances && balances.length > 0) {
+        const types = balances.map(balance => balance.leave_type).filter(Boolean)
+        setLeaveTypes(types as LeaveType[])
+      } else {
+        // Fallback: If no balances allocated, show all active leave types
+        const { data: allTypes, error: typesError } = await supabase
+          .from("leave_types")
+          .select("*")
+          .eq("is_active", true)
+          .order("name")
+
+        if (typesError) throw typesError
+        setLeaveTypes(allTypes || [])
+      }
     } catch (error) {
       console.error("Error fetching leave types:", error)
     }
@@ -135,7 +152,7 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
         throw new Error("Leave already applied for dates in this range")
       }
 
-      // Insert leave application
+      // Insert leave application (auto-approved)
       const { error: insertError } = await supabase.from("leaves").insert({
         user_id: userId,
         leave_type_id: formData.leave_type_id,
@@ -145,7 +162,8 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
         to_session: formData.to_session,
         total_days: totalDays,
         reason: formData.reason,
-        status: "pending",
+        status: "approved",
+        approved_at: new Date().toISOString(),
       })
 
       if (insertError) throw insertError

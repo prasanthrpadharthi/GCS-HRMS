@@ -168,47 +168,43 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
       const supabase = createClient()
       
       // Check if attendance already exists for this date
-      const { data: existingAttendance } = await supabase
+      const { data: existingAttendance, error: fetchError } = await supabase
         .from("attendance")
         .select("*")
         .eq("user_id", userId)
         .eq("date", manualDate)
-        .single()
+        .maybeSingle()
+
+      // Ignore PGRST116 error (no rows returned)
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError
+      }
 
       if (existingAttendance) {
-        // Update existing attendance - only update clock times
-        const updateData: any = {
-          clock_in: manualClockIn,
-          status: "present",
-        }
-
-        if (manualClockOut) {
-          updateData.clock_out = manualClockOut
-        }
-
-        const { error: updateError } = await supabase
+        // Delete existing attendance first
+        const { error: deleteError } = await supabase
           .from("attendance")
-          .update(updateData)
+          .delete()
           .eq("id", existingAttendance.id)
 
-        if (updateError) throw updateError
-      } else {
-        // Insert new attendance
-        const attendanceData: any = {
-          user_id: userId,
-          date: manualDate,
-          clock_in: manualClockIn,
-          status: "present",
-        }
-
-        if (manualClockOut) {
-          attendanceData.clock_out = manualClockOut
-        }
-
-        const { error: insertError } = await supabase.from("attendance").insert(attendanceData)
-
-        if (insertError) throw insertError
+        if (deleteError) throw deleteError
       }
+
+      // Insert new attendance record
+      const attendanceData: any = {
+        user_id: userId,
+        date: manualDate,
+        clock_in: manualClockIn,
+        status: "present",
+      }
+
+      if (manualClockOut) {
+        attendanceData.clock_out = manualClockOut
+      }
+
+      const { error: insertError } = await supabase.from("attendance").insert(attendanceData)
+
+      if (insertError) throw insertError
 
       // Reset form and close dialog
       setManualDate("")
@@ -242,11 +238,11 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
       <div className="text-center">
         <div className="text-4xl font-bold text-amber-900 mb-2">{formatTime(currentTime)}</div>
         <p className="text-sm text-amber-700">
-          {currentTime.toLocaleDateString("en-SG", {
+          {currentTime.toLocaleDateString("en-GB", {
             weekday: "long",
+            day: "2-digit",
+            month: "2-digit",
             year: "numeric",
-            month: "long",
-            day: "numeric",
           })}
         </p>
       </div>
