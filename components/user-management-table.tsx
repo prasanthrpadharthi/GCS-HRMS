@@ -118,7 +118,11 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
 
       const { error: updateError } = await supabase.from("users").update(updateData).eq("id", selectedUser.id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        console.error("User update error:", updateError)
+        console.error("Error details:", JSON.stringify(updateError, null, 2))
+        throw new Error(updateError.message || "Failed to update user")
+      }
 
       setIsEditOpen(false)
       setSelectedUser(null)

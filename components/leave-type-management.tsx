@@ -86,7 +86,15 @@ export function LeaveTypeManagement({ leaveTypes }: LeaveTypeManagementProps) {
     try {
       const supabase = createClient()
 
-      const { error: updateError } = await supabase
+      console.log("Attempting to update leave type:", selectedType.id)
+      console.log("Update data:", {
+        name: formData.name,
+        description: formData.description,
+        is_paid: formData.is_paid,
+        is_active: formData.is_active,
+      })
+
+      const { data, error: updateError } = await supabase
         .from("leave_types")
         .update({
           name: formData.name,
@@ -95,10 +103,19 @@ export function LeaveTypeManagement({ leaveTypes }: LeaveTypeManagementProps) {
           is_active: formData.is_active,
         })
         .eq("id", selectedType.id)
+        .select()
+
+      console.log("Update response data:", data)
+      console.log("Update response error:", updateError)
 
       if (updateError) {
         console.error("Leave type update error:", updateError)
-        throw updateError
+        console.error("Error details:", JSON.stringify(updateError, null, 2))
+        console.error("Error code:", updateError.code)
+        console.error("Error message:", updateError.message)
+        console.error("Error hint:", updateError.hint)
+        console.error("Error details:", updateError.details)
+        throw new Error(updateError.message || "Failed to update leave type")
       }
 
       setIsEditOpen(false)
@@ -106,7 +123,12 @@ export function LeaveTypeManagement({ leaveTypes }: LeaveTypeManagementProps) {
       resetForm()
       router.refresh()
     } catch (error: unknown) {
+      console.error("Caught error type:", typeof error)
       console.error("Error updating leave type:", error)
+      if (error instanceof Error) {
+        console.error("Error name:", error.name)
+        console.error("Error stack:", error.stack)
+      }
       setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
       setIsLoading(false)

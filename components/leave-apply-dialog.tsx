@@ -52,18 +52,32 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
       const supabase = createClient()
       const currentYear = new Date().getFullYear()
       
-      // Try to get leave balances with leave types for current user
+      // First, get leave balances for current user
       const { data: balances, error: balanceError } = await supabase
         .from("leave_balances")
-        .select("*, leave_type:leave_types(*)")
+        .select("leave_type_id")
         .eq("user_id", userId)
         .eq("year", currentYear)
-        .gt("allocated_days", 0) // Only show types with allocation
+        .gt("total_days", 0) // Only show types with allocation (fixed field name)
 
-      // If user has allocated balances, use those
+      if (balanceError) {
+        console.error("Balance fetch error:", balanceError)
+      }
+
+      // If user has allocated balances, get those specific leave types
       if (balances && balances.length > 0) {
-        const types = balances.map(balance => balance.leave_type).filter(Boolean)
-        setLeaveTypes(types as LeaveType[])
+        const leaveTypeIds = balances.map(b => b.leave_type_id)
+        const { data: types, error: typesError } = await supabase
+          .from("leave_types")
+          .select("*")
+          .in("id", leaveTypeIds)
+          .order("name")
+
+        if (typesError) {
+          console.error("Leave types fetch error:", typesError)
+          throw typesError
+        }
+        setLeaveTypes(types || [])
       } else {
         // Fallback: If no balances allocated, show all active leave types
         const { data: allTypes, error: typesError } = await supabase
@@ -72,7 +86,10 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
           .eq("is_active", true)
           .order("name")
 
-        if (typesError) throw typesError
+        if (typesError) {
+          console.error("Leave types fetch error:", typesError)
+          throw typesError
+        }
         setLeaveTypes(allTypes || [])
       }
     } catch (error) {

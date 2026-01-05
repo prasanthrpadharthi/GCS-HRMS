@@ -113,6 +113,20 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
       const now = new Date()
       const timeString = now.toTimeString().split(" ")[0]
 
+      // Check if attendance already exists for today
+      const { data: existingAttendance } = await supabase
+        .from("attendance")
+        .select("id, clock_in")
+        .eq("user_id", userId)
+        .eq("date", today)
+        .maybeSingle()
+
+      if (existingAttendance) {
+        setError("Attendance already exists for today. Please delete the existing record first to mark again.")
+        return
+      }
+
+      // Insert new attendance record
       const { error: insertError } = await supabase.from("attendance").insert({
         user_id: userId,
         date: today,

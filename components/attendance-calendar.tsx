@@ -59,14 +59,25 @@ export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCal
 
     try {
       const supabase = createClient()
-      const { error } = await supabase
+      console.log("Deleting attendance ID:", attendanceId)
+      
+      const { data, error } = await supabase
         .from("attendance")
         .delete()
         .eq("id", attendanceId)
+        .select()
 
-      if (error) throw error
+      console.log("Delete response data:", data)
+      console.log("Delete response error:", error)
+
+      if (error) {
+        console.error("Delete error details:", JSON.stringify(error, null, 2))
+        throw error
+      }
+      
       router.refresh()
     } catch (error) {
+      console.error("Caught delete error:", error)
       alert(error instanceof Error ? error.message : "An error occurred")
     }
   }
