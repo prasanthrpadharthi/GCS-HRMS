@@ -40,7 +40,7 @@ export default async function LeaveAllocationPage() {
   // Get all leave balances for current year
   const { data: leaveBalances } = await supabase
     .from("leave_balances")
-    .select("*, leave_type:leave_types(*), user:users(id, full_name, email)")
+    .select("*, leave_type:leave_types(*), user:users!leave_balances_user_id_fkey(id, full_name, email)")
     .eq("year", currentYear)
 
   return (

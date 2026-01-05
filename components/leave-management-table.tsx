@@ -51,9 +51,13 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
         })
         .eq("id", leaveId)
 
-      if (error) throw error
+      if (error) {
+        console.error("Leave approval error:", error)
+        throw error
+      }
       router.refresh()
     } catch (error) {
+      console.error("Error approving leave:", error)
       alert(error instanceof Error ? error.message : "An error occurred")
     }
   }

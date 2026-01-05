@@ -127,3 +127,24 @@ CREATE POLICY "Users can view leave balances" ON public.leave_balances
 
 CREATE POLICY "Admins can manage leave balances" ON public.leave_balances
   FOR ALL USING (public.is_admin());
+
+-- ========================================
+-- Fix Leave Types Table RLS Policies
+-- ========================================
+
+-- Drop existing leave_types policies
+DROP POLICY IF EXISTS "Anyone can view active leave types" ON public.leave_types;
+DROP POLICY IF EXISTS "Admins can manage leave types" ON public.leave_types;
+
+-- Recreate leave_types policies
+CREATE POLICY "Users can view leave types" ON public.leave_types
+  FOR SELECT USING (true); -- Everyone can view leave types
+
+CREATE POLICY "Admins can insert leave types" ON public.leave_types
+  FOR INSERT WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can update leave types" ON public.leave_types
+  FOR UPDATE USING (public.is_admin());
+
+CREATE POLICY "Admins can delete leave types" ON public.leave_types
+  FOR DELETE USING (public.is_admin());

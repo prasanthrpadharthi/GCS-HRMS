@@ -23,7 +23,7 @@ export default async function LeavesPage() {
   // Get leaves based on role
   let leavesQuery = supabase
     .from("leaves")
-    .select("*, leave_type:leave_types(*), user:users(id, full_name, email)")
+    .select("*, leave_type:leave_types(*), user:users!leaves_user_id_fkey(id, full_name, email)")
     .order("from_date", { ascending: false })
 
   if (userData?.role !== "admin") {

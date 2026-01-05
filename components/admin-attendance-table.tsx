@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Trash2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { LoadingSpinner } from "@/components/ui/loading"
 
 interface AdminAttendanceTableProps {
   initialAttendance: Attendance[]
@@ -92,7 +93,7 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
       
       const { data } = await supabase
         .from("attendance")
-        .select("*, user:users(id, full_name, email)")
+        .select("*, user:users!attendance_user_id_fkey(id, full_name, email)")
         .gte("date", firstDay.toISOString().split("T")[0])
         .lte("date", lastDay.toISOString().split("T")[0])
         .order("date", { ascending: false })
@@ -178,11 +179,14 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
       </div>
 
       {/* Attendance Tables */}
-      <div className="space-y-6">
-        {Object.keys(groupedAttendance).length === 0 ? (
-          <div className="text-center py-8 text-amber-700">No attendance records found</div>
-        ) : (
-          Object.entries(groupedAttendance).map(([userName, records]: [string, any]) => (
+      {isLoading ? (
+        <LoadingSpinner message="Loading attendance records..." />
+      ) : (
+        <div className="space-y-6">
+          {Object.keys(groupedAttendance).length === 0 ? (
+            <div className="text-center py-8 text-amber-700">No attendance records found</div>
+          ) : (
+            Object.entries(groupedAttendance).map(([userName, records]: [string, any]) => (
             <div key={userName} className="border border-amber-200 rounded-lg overflow-hidden bg-white">
               <div className="bg-amber-100 px-4 py-3 border-b border-amber-200">
                 <h3 className="font-semibold text-amber-900">{userName}</h3>
@@ -243,7 +247,8 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
             </div>
           ))
         )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

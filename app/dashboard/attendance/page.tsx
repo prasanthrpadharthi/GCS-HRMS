@@ -38,7 +38,7 @@ export default async function AttendancePage() {
   // For admin, get all users' attendance; for users, only their own
   let monthAttendanceQuery = supabase
     .from("attendance")
-    .select("*, user:users(id, full_name, email)")
+    .select("*, user:users!attendance_user_id_fkey(id, full_name, email)")
     .gte("date", firstDay.toISOString().split("T")[0])
     .lte("date", lastDay.toISOString().split("T")[0])
     .order("date", { ascending: false })

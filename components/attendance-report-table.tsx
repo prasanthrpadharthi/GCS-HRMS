@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Download } from "lucide-react"
 import type { User } from "@/lib/types"
+import { LoadingSpinner } from "@/components/ui/loading"
 
 interface AttendanceReportTableProps {
   currentUserId: string
@@ -107,7 +108,14 @@ export function AttendanceReportTable({
       const workingDays = calculateWorkingDays(year, month, weekendDays)
 
       // Determine which users to fetch
-      const usersToProcess = selectedUserId === "all" ? allUsers : ([currentUserData].filter(Boolean) as User[])
+      let usersToProcess: User[] = []
+      if (selectedUserId === "all") {
+        usersToProcess = allUsers
+      } else {
+        // Find the selected user from allUsers or use currentUserData
+        const selectedUser = allUsers.find(u => u.id === selectedUserId) || currentUserData
+        usersToProcess = selectedUser ? [selectedUser] : []
+      }
 
       const reports: ReportData[] = []
 
@@ -297,7 +305,7 @@ export function AttendanceReportTable({
       </div>
 
       {isLoading ? (
-        <div className="text-center py-8 text-amber-700">Loading report...</div>
+        <LoadingSpinner message="Generating attendance report..." />
       ) : reportData.length === 0 ? (
         <div className="text-center py-8 text-amber-700">No data available for selected period</div>
       ) : (

@@ -176,26 +176,39 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
         .single()
 
       if (existingAttendance) {
-        setError("Attendance already marked for this date")
-        setIsLoading(false)
-        return
+        // Update existing attendance - only update clock times
+        const updateData: any = {
+          clock_in: manualClockIn,
+          status: "present",
+        }
+
+        if (manualClockOut) {
+          updateData.clock_out = manualClockOut
+        }
+
+        const { error: updateError } = await supabase
+          .from("attendance")
+          .update(updateData)
+          .eq("id", existingAttendance.id)
+
+        if (updateError) throw updateError
+      } else {
+        // Insert new attendance
+        const attendanceData: any = {
+          user_id: userId,
+          date: manualDate,
+          clock_in: manualClockIn,
+          status: "present",
+        }
+
+        if (manualClockOut) {
+          attendanceData.clock_out = manualClockOut
+        }
+
+        const { error: insertError } = await supabase.from("attendance").insert(attendanceData)
+
+        if (insertError) throw insertError
       }
-
-      // Insert manual attendance
-      const attendanceData: any = {
-        user_id: userId,
-        date: manualDate,
-        clock_in: manualClockIn,
-        status: "present",
-      }
-
-      if (manualClockOut) {
-        attendanceData.clock_out = manualClockOut
-      }
-
-      const { error: insertError } = await supabase.from("attendance").insert(attendanceData)
-
-      if (insertError) throw insertError
 
       // Reset form and close dialog
       setManualDate("")
