@@ -28,6 +28,9 @@ interface ReportData {
   paidLeaveDays: number
   unpaidLeaveDays: number
   halfDays: number
+  totalHoursWorked: number
+  effectiveDays: number
+  deficitHours: number
   calculatedSalary: number
 }
 
@@ -140,33 +143,89 @@ export function AttendanceReportTable({
         // Calculate metrics
         const presentDays = attendance?.filter((a) => a.status === "present").length || 0
         
-        // Calculate total leave days considering half days
+        // Calculate total hours worked (excluding 1 hour lunch break per day)
+        let totalHoursWorked = 0
+        let deficitHours = 0
+        if (attendance) {
+          attendance.forEach((record) => {
+            if (record.clock_in && record.clock_out && record.status === "present") {
+              const clockIn = new Date(`${record.date}T${record.clock_in}`)
+              const clockOut = new Date(`${record.date}T${record.clock_out}`)
+              const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
+              // Subtract 1 hour for lunch break
+              const netHours = Math.max(0, hoursWorked - 1)
+              totalHoursWorked += netHours
+              
+              // Calculate deficit for this day (8.5 expected - actual hours)
+              const dayDeficit = 8.5 - netHours
+              if (dayDeficit > 0) {
+                deficitHours += dayDeficit
+              }
+            }
+          })
+        }
+        
+        // Calculate effective days (total hours / 8.5 hours per day)
+        const effectiveDays = totalHoursWorked > 0 ? totalHoursWorked / 8.5 : 0
+        
+        // Calculate total leave days excluding weekends
         let totalLeaveDays = 0
         let paidLeaveDays = 0
         let unpaidLeaveDays = 0
         
         leaves?.forEach((leave) => {
           const isPaid = leave.leave_type?.is_paid || false
-          const days = leave.total_days || 0
           
-          totalLeaveDays += days
+          // Recalculate leave days excluding weekends
+          const fromDate = new Date(leave.from_date)
+          const toDate = new Date(leave.to_date)
+          let workingDaysInLeave = 0
+          const currentDate = new Date(fromDate)
+          
+          while (currentDate <= toDate) {
+            const dayName = currentDate.toLocaleDateString("en-US", { weekday: "long" })
+            if (!weekendDays.includes(dayName)) {
+              workingDaysInLeave++
+            }
+            currentDate.setDate(currentDate.getDate() + 1)
+          }
+          
+          // Adjust for half days (from_session and to_session)
+          let adjustedLeaveDays = workingDaysInLeave
+          if (leave.from_date === leave.to_date) {
+            // Same day leave
+            if (leave.from_session !== "full" || leave.to_session !== "full") {
+              adjustedLeaveDays = 0.5
+            }
+          } else {
+            // Multi-day leave
+            if (leave.from_session === "afternoon") {
+              adjustedLeaveDays -= 0.5
+            }
+            if (leave.to_session === "morning") {
+              adjustedLeaveDays -= 0.5
+            }
+          }
+          
+          totalLeaveDays += adjustedLeaveDays
           
           if (isPaid) {
-            paidLeaveDays += days
+            paidLeaveDays += adjustedLeaveDays
           } else {
-            unpaidLeaveDays += days
+            unpaidLeaveDays += adjustedLeaveDays
           }
         })
 
         const absentDays = Math.max(0, workingDays - presentDays - totalLeaveDays)
 
-        // Calculate salary (Singapore MOM compliant)
+        // Calculate salary based on effective hours worked (Singapore MOM compliant)
         let calculatedSalary = 0
         if (user.salary) {
           const salaryPerDay = calculateSalaryPerDay(user.salary, workingDays)
 
-          // Salary = (Present days + Paid leave days) * Daily rate
-          const totalPaidDays = presentDays + paidLeaveDays
+          // Use effective days (based on hours worked) instead of just present days
+          // Salary = (Effective days + Paid leave days) * Daily rate
+          const totalPaidDays = effectiveDays + paidLeaveDays
 
           calculatedSalary = totalPaidDays * salaryPerDay
         }
@@ -181,6 +240,9 @@ export function AttendanceReportTable({
           paidLeaveDays,
           unpaidLeaveDays,
           halfDays: 0, // This field can be removed or calculated properly if needed
+          totalHoursWorked,
+          effectiveDays,
+          deficitHours,
           calculatedSalary,
         })
       }
@@ -204,11 +266,13 @@ export function AttendanceReportTable({
       "Total Days",
       "Working Days",
       "Present Days",
+      "Total Hours Worked",
+      "Deficit Hours",
+      "Effective Days",
       "Absent Days",
       "Leave Days",
       "Paid Leaves",
       "Unpaid Leaves",
-      "Half Days",
       "Monthly Salary (SGD)",
       "Calculated Salary (SGD)",
     ]
@@ -220,11 +284,13 @@ export function AttendanceReportTable({
       data.totalDays,
       data.workingDays,
       data.presentDays,
+      data.totalHoursWorked.toFixed(2),
+      data.deficitHours.toFixed(2),
+      data.effectiveDays.toFixed(2),
       data.absentDays.toFixed(1),
       data.leaveDays,
       data.paidLeaveDays,
       data.unpaidLeaveDays,
-      data.halfDays,
       data.user.salary?.toFixed(2) || "N/A",
       data.calculatedSalary.toFixed(2),
     ])
@@ -316,11 +382,13 @@ export function AttendanceReportTable({
                 <TableHead className="text-amber-900">Employee</TableHead>
                 <TableHead className="text-amber-900 text-right">Working Days</TableHead>
                 <TableHead className="text-amber-900 text-right">Present</TableHead>
+                <TableHead className="text-amber-900 text-right">Total Hours</TableHead>
+                <TableHead className="text-amber-900 text-right">Deficit Hours</TableHead>
+                <TableHead className="text-amber-900 text-right">Effective Days</TableHead>
                 <TableHead className="text-amber-900 text-right">Absent</TableHead>
                 <TableHead className="text-amber-900 text-right">Leaves</TableHead>
                 <TableHead className="text-amber-900 text-right">Paid Leaves</TableHead>
                 <TableHead className="text-amber-900 text-right">Unpaid Leaves</TableHead>
-                <TableHead className="text-amber-900 text-right">Half Days</TableHead>
                 <TableHead className="text-amber-900 text-right">Monthly Salary</TableHead>
                 <TableHead className="text-amber-900 text-right">Calculated Salary</TableHead>
               </TableRow>
@@ -336,11 +404,15 @@ export function AttendanceReportTable({
                   </TableCell>
                   <TableCell className="text-right text-amber-900">{data.workingDays}</TableCell>
                   <TableCell className="text-right text-green-700 font-medium">{data.presentDays}</TableCell>
+                  <TableCell className="text-right text-blue-700 font-medium">{data.totalHoursWorked.toFixed(1)} hrs</TableCell>
+                  <TableCell className="text-right text-red-600 font-medium">
+                    {data.deficitHours > 0 ? `${data.deficitHours.toFixed(1)} hrs` : '0 hrs'}
+                  </TableCell>
+                  <TableCell className="text-right text-green-700 font-bold">{data.effectiveDays.toFixed(2)}</TableCell>
                   <TableCell className="text-right text-red-700 font-medium">{data.absentDays.toFixed(1)}</TableCell>
                   <TableCell className="text-right text-amber-900">{data.leaveDays}</TableCell>
                   <TableCell className="text-right text-blue-700">{data.paidLeaveDays}</TableCell>
                   <TableCell className="text-right text-orange-700">{data.unpaidLeaveDays}</TableCell>
-                  <TableCell className="text-right text-yellow-700">{data.halfDays}</TableCell>
                   <TableCell className="text-right text-amber-900">
                     {data.user.salary ? `$${data.user.salary.toFixed(2)}` : "N/A"}
                   </TableCell>
@@ -355,10 +427,14 @@ export function AttendanceReportTable({
       )}
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
-        <p className="font-semibold mb-2">Singapore MOM Salary Calculation:</p>
+        <p className="font-semibold mb-2">Singapore MOM Salary Calculation (Hours-Based):</p>
         <ul className="list-disc list-inside space-y-1">
+          <li>Expected Hours: 8.5 hours per day (9:30 AM - 7:00 PM with 1 hour lunch break)</li>
+          <li>Total Hours Worked: Sum of all daily hours (Clock Out - Clock In - 1 hour lunch)</li>
+          <li>Deficit Hours: Total hours short of expected hours (only counting shortfalls, not excess)</li>
+          <li>Effective Days = Total Hours Worked ÷ 8.5 hours</li>
           <li>Daily Rate = Monthly Salary ÷ Number of Working Days in Month</li>
-          <li>Calculated Salary = (Present Days + Paid Leave Days + Paid Half Days × 0.5) × Daily Rate</li>
+          <li>Calculated Salary = (Effective Days + Paid Leave Days) × Daily Rate</li>
           <li>Unpaid leaves are deducted from the calculated salary</li>
           <li>Weekends (Saturday & Sunday) are excluded from working days calculation</li>
         </ul>

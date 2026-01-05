@@ -91,41 +91,65 @@ export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCal
         <p className="text-center text-amber-700 py-8">No attendance records for this month</p>
       ) : (
         <>
-          {sortedAttendance.map((record) => (
-            <div
-              key={record.id}
-              className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200"
-            >
-              <div className="flex-1">
-                <p className="font-medium text-amber-900">
-                  {new Date(record.date).toLocaleDateString("en-GB", {
-                    weekday: "short",
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                  })}
-                </p>
-                <div className="flex gap-2 mt-1 text-xs text-amber-700">
-                  {record.clock_in && <span>In: {record.clock_in}</span>}
-                  {record.clock_out && <span>Out: {record.clock_out}</span>}
+          {sortedAttendance.map((record) => {
+            // Calculate hours worked and deficit
+            let hoursWorked = 0
+            let deficitHours = 0
+            if (record.clock_in && record.clock_out) {
+              const clockIn = new Date(`${record.date}T${record.clock_in}`)
+              const clockOut = new Date(`${record.date}T${record.clock_out}`)
+              const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
+              hoursWorked = Math.max(0, totalHours - 1) // Subtract 1 hour lunch
+              deficitHours = 8.5 - hoursWorked
+            }
+
+            return (
+              <div
+                key={record.id}
+                className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-amber-900">
+                    {new Date(record.date).toLocaleDateString("en-GB", {
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })}
+                  </p>
+                  <div className="flex gap-2 mt-1 text-xs text-amber-700">
+                    {record.clock_in && <span>In: {record.clock_in}</span>}
+                    {record.clock_out && <span>Out: {record.clock_out}</span>}
+                  </div>
+                  {record.clock_in && record.clock_out && (
+                    <div className="flex gap-2 mt-1 text-xs">
+                      <span className="text-blue-700 font-medium">{hoursWorked.toFixed(1)} hrs</span>
+                      {deficitHours > 0 && (
+                        <span className="text-red-600 font-medium">(-{deficitHours.toFixed(1)} hrs)</span>
+                      )}
+                      {deficitHours < 0 && (
+                        <span className="text-green-600 font-medium">(+{Math.abs(deficitHours).toFixed(1)} hrs)</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className={getStatusColor(record.status)} variant="outline">
+                    {record.status.replace("_", " ")}
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-600 hover:text-red-700 h-8 w-8 p-0"
+                    onClick={() => handleDeleteAttendance(record.id)}
+                    title="Delete attendance"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge className={getStatusColor(record.status)} variant="outline">
-                  {record.status.replace("_", " ")}
-                </Badge>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-red-600 hover:text-red-700 h-8 w-8 p-0"
-                  onClick={() => handleDeleteAttendance(record.id)}
-                  title="Delete attendance"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
 
           {sortedLeaves.map((leave) => (
             <div

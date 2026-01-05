@@ -45,17 +45,79 @@ export default async function DashboardPage() {
     .lte("date", lastDay.toISOString().split("T")[0])
     .eq("status", "present")
 
-  // Get leaves count and total days (all auto-approved)
+  // Get attendance records with clock times to calculate total hours
+  const { data: attendanceRecords } = await supabase
+    .from("attendance")
+    .select("clock_in, clock_out, date")
+    .eq("user_id", user.id)
+    .gte("date", firstDay.toISOString().split("T")[0])
+    .lte("date", lastDay.toISOString().split("T")[0])
+    .eq("status", "present")
+
+  // Calculate total hours worked (excluding 1 hour lunch break per day)
+  let totalHoursWorked = 0
+  if (attendanceRecords) {
+    attendanceRecords.forEach((record) => {
+      if (record.clock_in && record.clock_out) {
+        const clockIn = new Date(`${record.date}T${record.clock_in}`)
+        const clockOut = new Date(`${record.date}T${record.clock_out}`)
+        const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
+        // Subtract 1 hour for lunch break
+        const netHours = Math.max(0, hoursWorked - 1)
+        totalHoursWorked += netHours
+      }
+    })
+  }
+
+  // Calculate effective days (total hours / 8.5 hours per day)
+  const effectiveDays = totalHoursWorked > 0 ? (totalHoursWorked / 8.5).toFixed(2) : "0"
+
+  // Get leaves data (all auto-approved)
   const { data: leavesData, count: leavesCount } = await supabase
     .from("leaves")
-    .select("total_days", { count: "exact" })
+    .select("from_date, to_date, from_session, to_session", { count: "exact" })
     .eq("user_id", user.id)
     .gte("from_date", firstDay.toISOString().split("T")[0])
     .lte("to_date", lastDay.toISOString().split("T")[0])
     .eq("status", "approved")
 
-  // Calculate total leave days
-  const totalLeaveDays = leavesData?.reduce((sum, leave) => sum + (leave.total_days || 0), 0) || 0
+  // Calculate total leave days excluding weekends
+  let totalLeaveDays = 0
+  const weekendDays = settings?.weekend_days || ["Saturday", "Sunday"]
+  
+  if (leavesData) {
+    leavesData.forEach((leave) => {
+      const fromDate = new Date(leave.from_date)
+      const toDate = new Date(leave.to_date)
+      let workingDaysInLeave = 0
+      const currentDate = new Date(fromDate)
+      
+      while (currentDate <= toDate) {
+        const dayName = currentDate.toLocaleDateString("en-US", { weekday: "long" })
+        if (!weekendDays.includes(dayName)) {
+          workingDaysInLeave++
+        }
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
+      
+      // Adjust for half days
+      let adjustedLeaveDays = workingDaysInLeave
+      if (leave.from_date === leave.to_date) {
+        if (leave.from_session !== "full" || leave.to_session !== "full") {
+          adjustedLeaveDays = 0.5
+        }
+      } else {
+        if (leave.from_session === "afternoon") {
+          adjustedLeaveDays -= 0.5
+        }
+        if (leave.to_session === "morning") {
+          adjustedLeaveDays -= 0.5
+        }
+      }
+      
+      totalLeaveDays += adjustedLeaveDays
+    })
+  }
 
   // Get total users count (admin only)
   let totalUsers = null
@@ -90,7 +152,9 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-900">{attendanceCount || 0}</div>
-            <p className="text-xs text-amber-700 mt-1">This month</p>
+            <p className="text-xs text-amber-700 mt-1">
+              {totalHoursWorked > 0 ? `${totalHoursWorked.toFixed(1)} hrs = ${effectiveDays} days` : 'This month'}
+            </p>
           </CardContent>
         </Card>
 

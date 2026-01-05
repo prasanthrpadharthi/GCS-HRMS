@@ -19,17 +19,20 @@ import { Textarea } from "@/components/ui/textarea"
 import { CalendarIcon } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import type { LeaveType } from "@/lib/types"
+import { useAlert } from "@/components/ui/alert-custom"
+import type { LeaveType, CompanySettings } from "@/lib/types"
 
 interface LeaveApplyDialogProps {
   userId: string
 }
 
 export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
+  const { showAlert } = useAlert()
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
+  const [settings, setSettings] = useState<CompanySettings | null>(null)
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -44,8 +47,19 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
   useEffect(() => {
     if (isOpen) {
       fetchLeaveTypes()
+      fetchCompanySettings()
     }
   }, [isOpen])
+
+  const fetchCompanySettings = async () => {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase.from("company_settings").select("*").single()
+      setSettings(data)
+    } catch (error) {
+      console.error("Error fetching company settings:", error)
+    }
+  }
 
   const fetchLeaveTypes = async () => {
     try {
@@ -97,19 +111,35 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
     }
   }
 
+  const isDateWeekend = (dateString: string) => {
+    if (!dateString || !settings) return false
+    const date = new Date(dateString)
+    const dayName = date.toLocaleDateString("en-US", { weekday: "long" })
+    return settings.weekend_days.includes(dayName)
+  }
+
   const calculateTotalDays = () => {
-    if (!formData.from_date || !formData.to_date) return 0
+    if (!formData.from_date || !formData.to_date || !settings) return 0
 
     const start = new Date(formData.from_date)
     const end = new Date(formData.to_date)
     
     if (end < start) return 0
 
-    // Calculate total days
-    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    // Count working days (excluding weekends)
+    let workingDays = 0
+    const currentDate = new Date(start)
+    
+    while (currentDate <= end) {
+      const dayName = currentDate.toLocaleDateString("en-US", { weekday: "long" })
+      if (!settings.weekend_days.includes(dayName)) {
+        workingDays++
+      }
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
     
     // Adjust for half days
-    let totalDays = daysDiff
+    let totalDays = workingDays
     
     if (formData.from_date === formData.to_date) {
       // Same day - check if half day
@@ -143,6 +173,18 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
 
   const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Check if from_date or to_date is a weekend
+    if (isDateWeekend(formData.from_date)) {
+      await showAlert("Weekend Day", "Leave start date cannot be on a weekend. Please select a working day.")
+      return
+    }
+    
+    if (isDateWeekend(formData.to_date)) {
+      await showAlert("Weekend Day", "Leave end date cannot be on a weekend. Please select a working day.")
+      return
+    }
+    
     setIsLoading(true)
     setError(null)
 
@@ -230,6 +272,11 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
                 className="border-amber-200"
                 min={new Date().toISOString().split("T")[0]}
               />
+              {formData.from_date && isDateWeekend(formData.from_date) && (
+                <p className="text-xs text-red-600 font-medium">
+                  ⚠️ This date is a weekend. Leave cannot start on a weekend.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -245,6 +292,11 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
                 className="border-amber-200"
                 min={formData.from_date || new Date().toISOString().split("T")[0]}
               />
+              {formData.to_date && isDateWeekend(formData.to_date) && (
+                <p className="text-xs text-red-600 font-medium">
+                  ⚠️ This date is a weekend. Leave cannot end on a weekend.
+                </p>
+              )}
             </div>
           </div>
 

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { useAlert } from "@/components/ui/alert-custom"
 
 interface AttendanceMarkerProps {
   attendance: Attendance | null
@@ -20,6 +21,7 @@ interface AttendanceMarkerProps {
 }
 
 export function AttendanceMarker({ attendance, settings, userId, today }: AttendanceMarkerProps) {
+  const { showAlert } = useAlert()
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -100,6 +102,14 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
   }
 
   const handleClockIn = async () => {
+    // Check if today is a weekend
+    const todayDate = new Date()
+    const dayName = todayDate.toLocaleDateString("en-US", { weekday: "long" })
+    if (settings?.weekend_days.includes(dayName)) {
+      await showAlert("Weekend Day", "Attendance marking is not allowed on weekends.")
+      return
+    }
+
     if (!canClockIn()) {
       setError(`Clock in is only allowed from ${settings?.mark_from_time} onwards`)
       return
@@ -175,6 +185,14 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
       return
     }
 
+    // Check if selected date is a weekend
+    const selectedDate = new Date(manualDate)
+    const dayName = selectedDate.toLocaleDateString("en-US", { weekday: "long" })
+    if (settings?.weekend_days.includes(dayName)) {
+      await showAlert("Weekend Day", "Attendance marking is not allowed on weekends. Please select a working day.")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -236,6 +254,13 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
 
   const isWeekend = () => {
     const dayName = currentTime.toLocaleDateString("en-US", { weekday: "long" })
+    return settings?.weekend_days.includes(dayName)
+  }
+
+  const isDateWeekend = (dateString: string) => {
+    if (!dateString) return false
+    const date = new Date(dateString)
+    const dayName = date.toLocaleDateString("en-US", { weekday: "long" })
     return settings?.weekend_days.includes(dayName)
   }
 
@@ -336,6 +361,11 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
                 onChange={(e) => setManualDate(e.target.value)}
                 className="w-full"
               />
+              {manualDate && isDateWeekend(manualDate) && (
+                <p className="text-xs text-red-600 font-medium">
+                  ⚠️ Selected date is a weekend. Attendance marking is not allowed on weekends.
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 You can select dates from previous month to today
               </p>
