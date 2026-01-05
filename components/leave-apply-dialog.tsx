@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { CalendarIcon } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import type { LeaveType } from "@/lib/types"
 
 interface LeaveApplyDialogProps {
   userId: string
@@ -28,20 +29,79 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
   const router = useRouter()
 
   const [formData, setFormData] = useState({
-    date: "",
-    leave_type: "paid" as "paid" | "unpaid",
-    day_type: "full" as "full" | "half",
+    from_date: "",
+    to_date: "",
+    from_session: "full" as "full" | "morning" | "afternoon",
+    to_session: "full" as "full" | "morning" | "afternoon",
+    leave_type_id: "",
     reason: "",
   })
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchLeaveTypes()
+    }
+  }, [isOpen])
+
+  const fetchLeaveTypes = async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("leave_types")
+        .select("*")
+        .eq("is_active", true)
+        .order("name")
+
+      if (error) throw error
+      setLeaveTypes(data || [])
+    } catch (error) {
+      console.error("Error fetching leave types:", error)
+    }
+  }
+
+  const calculateTotalDays = () => {
+    if (!formData.from_date || !formData.to_date) return 0
+
+    const start = new Date(formData.from_date)
+    const end = new Date(formData.to_date)
+    
+    if (end < start) return 0
+
+    // Calculate total days
+    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    
+    // Adjust for half days
+    let totalDays = daysDiff
+    
+    if (formData.from_date === formData.to_date) {
+      // Same day - check if half day
+      if (formData.from_session !== "full" || formData.to_session !== "full") {
+        totalDays = 0.5
+      }
+    } else {
+      // Different days
+      if (formData.from_session === "afternoon") {
+        totalDays -= 0.5
+      }
+      if (formData.to_session === "morning") {
+        totalDays -= 0.5
+      }
+    }
+
+    return totalDays
+  }
+
   const resetForm = () => {
     setFormData({
-      date: "",
-      leave_type: "paid",
-      day_type: "full",
+      from_date: "",
+      to_date: "",
+      from_session: "full",
+      to_session: "full",
+      leave_type_id: "",
       reason: "",
     })
     setError(null)
@@ -55,47 +115,40 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
     try {
       const supabase = createClient()
 
-      // Check if leave already exists for this date
-      const { data: existingLeave } = await supabase
+      if (!formData.leave_type_id) {
+        throw new Error("Please select a leave type")
+      }
+
+      const totalDays = calculateTotalDays()
+      if (totalDays <= 0) {
+        throw new Error("Invalid date range")
+      }
+
+      // Check for overlapping leaves
+      const { data: existingLeaves } = await supabase
         .from("leaves")
         .select("*")
         .eq("user_id", userId)
-        .eq("date", formData.date)
-        .single()
+        .or(`and(from_date.lte.${formData.to_date},to_date.gte.${formData.from_date})`)
 
-      if (existingLeave) {
-        throw new Error("Leave already applied for this date")
+      if (existingLeaves && existingLeaves.length > 0) {
+        throw new Error("Leave already applied for dates in this range")
       }
 
-      // Check if attendance exists for this date
-      const { data: existingAttendance } = await supabase
-        .from("attendance")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("date", formData.date)
-        .single()
-
-      if (existingAttendance) {
-        throw new Error("Attendance already marked for this date")
-      }
-
-      // Insert leave
+      // Insert leave application
       const { error: insertError } = await supabase.from("leaves").insert({
         user_id: userId,
-        date: formData.date,
-        leave_type: formData.leave_type,
-        day_type: formData.day_type,
+        leave_type_id: formData.leave_type_id,
+        from_date: formData.from_date,
+        to_date: formData.to_date,
+        from_session: formData.from_session,
+        to_session: formData.to_session,
+        total_days: totalDays,
         reason: formData.reason,
+        status: "pending",
       })
 
       if (insertError) throw insertError
-
-      // Also create an attendance record with status leave
-      await supabase.from("attendance").insert({
-        user_id: userId,
-        date: formData.date,
-        status: formData.day_type === "half" ? "half_day" : "leave",
-      })
 
       setIsOpen(false)
       resetForm()
@@ -122,97 +175,136 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
           Apply for Leave
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-gradient-to-br from-amber-50 to-orange-50">
+      <DialogContent className="bg-gradient-to-br from-amber-50 to-orange-50 max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-amber-900">Apply for Leave</DialogTitle>
           <DialogDescription className="text-amber-700">Fill in the details to apply for leave</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleApplyLeave} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="date" className="text-amber-900">
-              Date
-            </Label>
-            <Input
-              id="date"
-              type="date"
-              required
-              value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              className="border-amber-200"
-              min={new Date().toISOString().split("T")[0]}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="from_date" className="text-amber-900">
+                From Date *
+              </Label>
+              <Input
+                id="from_date"
+                type="date"
+                required
+                value={formData.from_date}
+                onChange={(e) => setFormData({ ...formData, from_date: e.target.value })}
+                className="border-amber-200"
+                min={new Date().toISOString().split("T")[0]}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="to_date" className="text-amber-900">
+                To Date *
+              </Label>
+              <Input
+                id="to_date"
+                type="date"
+                required
+                value={formData.to_date}
+                onChange={(e) => setFormData({ ...formData, to_date: e.target.value })}
+                className="border-amber-200"
+                min={formData.from_date || new Date().toISOString().split("T")[0]}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="from_session" className="text-amber-900">
+                From Session
+              </Label>
+              <Select
+                value={formData.from_session}
+                onValueChange={(value) => setFormData({ ...formData, from_session: value as any })}
+              >
+                <SelectTrigger className="border-amber-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">Full Day</SelectItem>
+                  <SelectItem value="morning">Morning</SelectItem>
+                  <SelectItem value="afternoon">Afternoon</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="to_session" className="text-amber-900">
+                To Session
+              </Label>
+              <Select
+                value={formData.to_session}
+                onValueChange={(value) => setFormData({ ...formData, to_session: value as any })}
+              >
+                <SelectTrigger className="border-amber-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">Full Day</SelectItem>
+                  <SelectItem value="morning">Morning</SelectItem>
+                  <SelectItem value="afternoon">Afternoon</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="leave_type" className="text-amber-900">
-              Leave Type
+            <Label htmlFor="leave_type_id" className="text-amber-900">
+              Leave Type *
             </Label>
             <Select
-              value={formData.leave_type}
-              onValueChange={(value) => setFormData({ ...formData, leave_type: value as "paid" | "unpaid" })}
+              value={formData.leave_type_id}
+              onValueChange={(value) => setFormData({ ...formData, leave_type_id: value })}
             >
               <SelectTrigger className="border-amber-200">
-                <SelectValue />
+                <SelectValue placeholder="Select leave type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="paid">Paid Leave</SelectItem>
-                <SelectItem value="unpaid">Unpaid Leave</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="day_type" className="text-amber-900">
-              Day Type
-            </Label>
-            <Select
-              value={formData.day_type}
-              onValueChange={(value) => setFormData({ ...formData, day_type: value as "full" | "half" })}
-            >
-              <SelectTrigger className="border-amber-200">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="full">Full Day</SelectItem>
-                <SelectItem value="half">Half Day</SelectItem>
+                {leaveTypes.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    {type.name} {!type.is_paid && "(Unpaid)"}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="reason" className="text-amber-900">
-              Reason (Optional)
+              Reason
             </Label>
             <Textarea
               id="reason"
+              placeholder="Enter reason for leave (optional)"
               value={formData.reason}
               onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-              className="border-amber-200"
-              placeholder="Enter reason for leave"
+              className="border-amber-200 resize-none"
               rows={3}
             />
           </div>
 
+          {formData.from_date && formData.to_date && (
+            <div className="bg-amber-100 p-3 rounded-lg">
+              <p className="text-sm font-semibold text-amber-900">
+                Total Days: {calculateTotalDays()}
+              </p>
+            </div>
+          )}
+
           {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
 
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsOpen(false)}
-              className="border-amber-300"
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
-            >
-              {isLoading ? "Submitting..." : "Apply Leave"}
-            </Button>
-          </div>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white"
+          >
+            {isLoading ? "Submitting..." : "Submit Leave Application"}
+          </Button>
         </form>
       </DialogContent>
     </Dialog>

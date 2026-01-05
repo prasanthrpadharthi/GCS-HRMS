@@ -2,11 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Clock, CheckCircle } from "lucide-react"
+import { Clock, CheckCircle, Calendar, Plus } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import type { Attendance, CompanySettings } from "@/lib/types"
 import { LeaveApplyDialog } from "@/components/leave-apply-dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 
 interface AttendanceMarkerProps {
   attendance: Attendance | null
@@ -19,7 +23,53 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isManualDialogOpen, setIsManualDialogOpen] = useState(false)
+  const [manualDate, setManualDate] = useState("")
+  const [manualClockIn, setManualClockIn] = useState("")
+  const [manualClockOut, setManualClockOut] = useState("")
   const router = useRouter()
+
+  // Generate time options in 30-minute intervals from 9:00 AM to 7:00 PM
+  const generateTimeOptions = () => {
+    const times: string[] = []
+    for (let hour = 9; hour <= 19; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        if (hour === 19 && minute > 0) break // Stop at 7:00 PM
+        const hourStr = hour.toString().padStart(2, "0")
+        const minuteStr = minute.toString().padStart(2, "0")
+        const time24 = `${hourStr}:${minuteStr}`
+        
+        // Convert to 12-hour format for display
+        const hour12 = hour > 12 ? hour - 12 : hour
+        const ampm = hour >= 12 ? "PM" : "AM"
+        const displayTime = `${hour12}:${minuteStr} ${ampm}`
+        
+        times.push(`${time24}|${displayTime}`)
+      }
+    }
+    return times
+  }
+
+  const timeOptions = generateTimeOptions()
+
+  // Get date range (current month and previous month)
+  const getDateRange = () => {
+    const now = new Date()
+    const currentMonth = now.getMonth()
+    const currentYear = now.getFullYear()
+    
+    // Previous month's first day
+    const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1
+    const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear
+    const minDate = new Date(prevYear, prevMonth, 1).toISOString().split("T")[0]
+    
+    // Current date
+    const maxDate = now.toISOString().split("T")[0]
+    
+    return { minDate, maxDate }
+  }
+
+  const { minDate, maxDate } = getDateRange()
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -105,6 +155,62 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
     }
   }
 
+  const handleManualAttendance = async () => {
+    if (!manualDate || !manualClockIn) {
+      setError("Please select date and clock in time")
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      
+      // Check if attendance already exists for this date
+      const { data: existingAttendance } = await supabase
+        .from("attendance")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("date", manualDate)
+        .single()
+
+      if (existingAttendance) {
+        setError("Attendance already marked for this date")
+        setIsLoading(false)
+        return
+      }
+
+      // Insert manual attendance
+      const attendanceData: any = {
+        user_id: userId,
+        date: manualDate,
+        clock_in: manualClockIn,
+        status: "present",
+      }
+
+      if (manualClockOut) {
+        attendanceData.clock_out = manualClockOut
+      }
+
+      const { error: insertError } = await supabase.from("attendance").insert(attendanceData)
+
+      if (insertError) throw insertError
+
+      // Reset form and close dialog
+      setManualDate("")
+      setManualClockIn("")
+      setManualClockOut("")
+      setIsManualDialogOpen(false)
+      
+      router.refresh()
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "An error occurred")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const isWeekend = () => {
     const dayName = currentTime.toLocaleDateString("en-US", { weekday: "long" })
     return settings?.weekend_days.includes(dayName)
@@ -178,6 +284,92 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
           )}
         </div>
       )}
+
+      {/* Manual Attendance Button */}
+      <Dialog open={isManualDialogOpen} onOpenChange={setIsManualDialogOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline" className="w-full border-amber-300 text-amber-900 hover:bg-amber-50">
+            <Plus className="mr-2 h-4 w-4" />
+            <Calendar className="mr-2 h-4 w-4" />
+            Mark Manual Attendance
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Mark Manual Attendance</DialogTitle>
+            <DialogDescription>
+              Mark attendance for any day in the current or previous month
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="manual-date">Date</Label>
+              <Input
+                id="manual-date"
+                type="date"
+                min={minDate}
+                max={maxDate}
+                value={manualDate}
+                onChange={(e) => setManualDate(e.target.value)}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                You can select dates from previous month to today
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clock-in">Clock In Time *</Label>
+              <Select value={manualClockIn} onValueChange={setManualClockIn}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select clock in time" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {timeOptions.map((time) => {
+                    const [value, display] = time.split("|")
+                    return (
+                      <SelectItem key={value} value={value}>
+                        {display}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clock-out">Clock Out Time (Optional)</Label>
+              <Select value={manualClockOut} onValueChange={setManualClockOut}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select clock out time" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {timeOptions.map((time) => {
+                    const [value, display] = time.split("|")
+                    return (
+                      <SelectItem key={value} value={value}>
+                        {display}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>
+            )}
+
+            <Button
+              onClick={handleManualAttendance}
+              disabled={isLoading || !manualDate || !manualClockIn}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {isLoading ? "Marking Attendance..." : "Mark Attendance"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="border-t border-amber-200 pt-4 text-sm text-amber-700">
         <p className="font-semibold mb-2 text-amber-900">Work Hours:</p>

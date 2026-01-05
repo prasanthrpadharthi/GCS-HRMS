@@ -40,7 +40,7 @@ export default async function DashboardPage() {
   // Get total users count (admin only)
   let totalUsers = null
   if (userData?.role === "admin") {
-    const { count } = await supabase.from("users").select("*", { count: "exact", head: true })
+    const { count } = await supabase.from("users").select("*", { count: "exact", head: true }).neq("role", "admin")
     totalUsers = count
   }
 

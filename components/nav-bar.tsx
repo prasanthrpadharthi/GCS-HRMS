@@ -67,8 +67,13 @@ export function NavBar({ user: initialUser }: NavBarProps) {
     { href: "/dashboard/attendance", label: "Attendance", icon: CalendarCheck },
     { href: "/dashboard/leaves", label: "Leaves", icon: Calendar },
     { href: "/dashboard/reports", label: "Reports", icon: FileText },
-    ...(user.role === "admin" ? [{ href: "/dashboard/users", label: "Users", icon: Users }] : []),
   ]
+
+  const adminItems = user.role === "admin" ? [
+    { href: "/dashboard/users", label: "Users", icon: Users },
+    { href: "/dashboard/leave-types", label: "Leave Types", icon: Calendar },
+    { href: "/dashboard/leave-allocation", label: "Leave Allocation", icon: FileText },
+  ] : []
 
   return (
     <nav className="bg-gradient-to-r from-amber-700 to-orange-700 text-white shadow-md sticky top-0 z-50">
@@ -97,6 +102,29 @@ export function NavBar({ user: initialUser }: NavBarProps) {
                 </Link>
               )
             })}
+            {adminItems.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="hover:bg-white/10 text-white">
+                    <Users className="mr-2 h-4 w-4" />
+                    Admin
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {adminItems.map((item) => {
+                    const Icon = item.icon
+                    return (
+                      <DropdownMenuItem key={item.href} asChild>
+                        <Link href={item.href} className="flex items-center gap-2 cursor-pointer">
+                          <Icon className="h-4 w-4" />
+                          {item.label}
+                        </Link>
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
 
           {/* User Menu */}
@@ -166,6 +194,31 @@ export function NavBar({ user: initialUser }: NavBarProps) {
                           </Link>
                         )
                       })}
+
+                      {adminItems.length > 0 && (
+                        <>
+                          <div className="border-t border-amber-200 my-2" />
+                          <p className="text-xs font-semibold text-amber-700 px-4">ADMIN</p>
+                          {adminItems.map((item) => {
+                            const Icon = item.icon
+                            return (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                onClick={() => setIsOpen(false)}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${
+                                  pathname === item.href
+                                    ? "bg-amber-200 text-amber-900 font-semibold"
+                                    : "text-amber-800 hover:bg-amber-100"
+                                }`}
+                              >
+                                <Icon className="h-5 w-5" />
+                                {item.label}
+                              </Link>
+                            )
+                          })}
+                        </>
+                      )}
                     </div>
 
                     <div className="border-t border-amber-200 pt-4 flex flex-col gap-2">

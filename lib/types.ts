@@ -25,12 +25,44 @@ export interface Attendance {
 export interface Leave {
   id: string
   user_id: string
-  date: string
-  leave_type: "paid" | "unpaid"
-  day_type: "full" | "half"
+  leave_type_id?: string
+  from_date: string
+  to_date: string
+  from_session: "full" | "morning" | "afternoon"
+  to_session: "full" | "morning" | "afternoon"
+  total_days: number
   reason?: string
+  status: "pending" | "approved" | "rejected"
+  approved_by?: string
+  approved_at?: string
   created_at: string
   updated_at: string
+  leave_type?: LeaveType
+  user?: User
+}
+
+export interface LeaveType {
+  id: string
+  name: string
+  description?: string
+  is_paid: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface LeaveBalance {
+  id: string
+  user_id: string
+  leave_type_id: string
+  year: number
+  total_days: number
+  used_days: number
+  remaining_days: number
+  created_at: string
+  updated_at: string
+  leave_type?: LeaveType
+  user?: User
 }
 
 export interface CompanySettings {
