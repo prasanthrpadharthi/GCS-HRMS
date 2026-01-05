@@ -3,7 +3,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Trash2, Check, X } from "lucide-react"
+import { Trash2, Check, X, RotateCcw } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import type { Leave } from "@/lib/types"
@@ -91,6 +91,27 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
     }
   }
 
+  const handleResetLeave = async (leaveId: string) => {
+    if (!confirm("Reset this leave to pending status?")) return
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("leaves")
+        .update({
+          status: "pending",
+          approved_by: null,
+          approved_at: null,
+        })
+        .eq("id", leaveId)
+
+      if (error) throw error
+      router.refresh()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "An error occurred")
+    }
+  }
+
   return (
     <div className="border border-amber-200 rounded-lg overflow-hidden bg-white">
       {leaves.length === 0 ? (
@@ -163,6 +184,7 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
                           variant="ghost"
                           className="text-green-600 hover:text-green-700 hover:bg-green-50"
                           onClick={() => handleApproveLeave(leave.id)}
+                          title="Approve"
                         >
                           <Check className="h-4 w-4" />
                         </Button>
@@ -171,10 +193,22 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
                           variant="ghost"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           onClick={() => handleRejectLeave(leave.id)}
+                          title="Reject"
                         >
                           <X className="h-4 w-4" />
                         </Button>
                       </>
+                    )}
+                    {isAdmin && leave.status !== "pending" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        onClick={() => handleResetLeave(leave.id)}
+                        title="Reset to Pending"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
                     )}
                     {(!isAdmin && leave.status === "pending") || isAdmin ? (
                       <Button
@@ -182,6 +216,7 @@ export function LeaveManagementTable({ leaves, isAdmin, currentUserId }: LeaveMa
                         variant="ghost"
                         className="text-red-600 hover:text-red-700"
                         onClick={() => handleDeleteLeave(leave.id)}
+                        title="Delete"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

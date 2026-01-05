@@ -123,30 +123,44 @@ export function AttendanceReportTable({
         // Get leave records
         const { data: leaves } = await supabase
           .from("leaves")
-          .select("*")
+          .select("*, leave_type:leave_types(*)")
           .eq("user_id", user.id)
-          .gte("date", startDate)
-          .lte("date", endDate)
+          .gte("from_date", startDate)
+          .lte("to_date", endDate)
+          .eq("status", "approved")  // Only count approved leaves
 
         // Calculate metrics
         const presentDays = attendance?.filter((a) => a.status === "present").length || 0
-        const leaveDays = leaves?.length || 0
-        const paidLeaveDays = leaves?.filter((l) => l.leave_type === "paid").length || 0
-        const unpaidLeaveDays = leaves?.filter((l) => l.leave_type === "unpaid").length || 0
-        const halfDays = leaves?.filter((l) => l.day_type === "half").length || 0
-        const fullLeaveDays = leaveDays - halfDays
-        const absentDays = workingDays - presentDays - fullLeaveDays - halfDays * 0.5
+        
+        // Calculate total leave days considering half days
+        let totalLeaveDays = 0
+        let paidLeaveDays = 0
+        let unpaidLeaveDays = 0
+        
+        leaves?.forEach((leave) => {
+          const isPaid = leave.leave_type?.is_paid || false
+          const days = leave.total_days || 0
+          
+          totalLeaveDays += days
+          
+          if (isPaid) {
+            paidLeaveDays += days
+          } else {
+            unpaidLeaveDays += days
+          }
+        })
+
+        const absentDays = Math.max(0, workingDays - presentDays - totalLeaveDays)
 
         // Calculate salary (Singapore MOM compliant)
         let calculatedSalary = 0
         if (user.salary) {
           const salaryPerDay = calculateSalaryPerDay(user.salary, workingDays)
 
-          // Salary = (Present days + Paid leave days + (Half paid leaves * 0.5)) * Daily rate
-          const paidFullDays = presentDays + paidLeaveDays
-          const paidHalfDays = leaves?.filter((l) => l.leave_type === "paid" && l.day_type === "half").length || 0
+          // Salary = (Present days + Paid leave days) * Daily rate
+          const totalPaidDays = presentDays + paidLeaveDays
 
-          calculatedSalary = (paidFullDays + paidHalfDays * 0.5) * salaryPerDay
+          calculatedSalary = totalPaidDays * salaryPerDay
         }
 
         reports.push({
@@ -155,10 +169,10 @@ export function AttendanceReportTable({
           workingDays,
           presentDays,
           absentDays,
-          leaveDays,
+          leaveDays: totalLeaveDays,
           paidLeaveDays,
           unpaidLeaveDays,
-          halfDays,
+          halfDays: 0, // This field can be removed or calculated properly if needed
           calculatedSalary,
         })
       }

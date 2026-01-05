@@ -30,7 +30,12 @@ export default async function LeavesPage() {
     leavesQuery = leavesQuery.eq("user_id", user.id)
   }
 
-  const { data: leaves } = await leavesQuery
+  const { data: leaves, error: leavesError } = await leavesQuery
+
+  // Log error for debugging (remove in production)
+  if (leavesError) {
+    console.error("Error fetching leaves:", leavesError)
+  }
 
   // Get leave balances for current user
   let leaveBalances = null

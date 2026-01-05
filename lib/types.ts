@@ -20,6 +20,7 @@ export interface Attendance {
   status: "present" | "absent" | "leave" | "half_day"
   created_at: string
   updated_at: string
+  user?: User
 }
 
 export interface Leave {
