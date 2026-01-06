@@ -270,7 +270,8 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
                 value={formData.from_date}
                 onChange={(e) => setFormData({ ...formData, from_date: e.target.value })}
                 className="border-amber-200"
-                min={new Date().toISOString().split("T")[0]}
+                min={`${new Date().getFullYear() - 1}-01-01`}
+                max={`${new Date().getFullYear()}-12-31`}
               />
               {formData.from_date && isDateWeekend(formData.from_date) && (
                 <p className="text-xs text-red-600 font-medium">
@@ -290,7 +291,8 @@ export function LeaveApplyDialog({ userId }: LeaveApplyDialogProps) {
                 value={formData.to_date}
                 onChange={(e) => setFormData({ ...formData, to_date: e.target.value })}
                 className="border-amber-200"
-                min={formData.from_date || new Date().toISOString().split("T")[0]}
+                min={formData.from_date || `${new Date().getFullYear() - 1}-01-01`}
+                max={`${new Date().getFullYear()}-12-31`}
               />
               {formData.to_date && isDateWeekend(formData.to_date) && (
                 <p className="text-xs text-red-600 font-medium">
