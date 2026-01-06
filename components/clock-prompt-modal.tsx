@@ -44,8 +44,10 @@ export function ClockPromptModal({ attendance, settings, userId, today }: ClockP
       if (!settings) return
 
       const now = new Date()
-      const markFromTime = settings.mark_from_time
-      const [hours, minutes] = markFromTime.split(":").map(Number)
+      const markFromTime = settings.mark_from_time || "00:00"
+      const parts = markFromTime.split(":")
+      if (parts.length < 2) return
+      const [hours, minutes] = parts.map(Number)
       const allowedTime = new Date()
       allowedTime.setHours(hours, minutes, 0)
 
@@ -75,8 +77,9 @@ export function ClockPromptModal({ attendance, settings, userId, today }: ClockP
       }
     }
 
-    // Only check once when component mounts
-    const hasShownPrompt = sessionStorage.getItem(`clock-prompt-${today}`)
+    // Only check once per user when component mounts
+    const promptKey = `clock-prompt-${today}-${userId}`
+    const hasShownPrompt = sessionStorage.getItem(promptKey)
     if (!hasShownPrompt) {
       checkAttendanceStatus()
     }
@@ -109,8 +112,8 @@ export function ClockPromptModal({ attendance, settings, userId, today }: ClockP
 
       if (insertError) throw insertError
 
-      // Mark that we've shown the prompt for today
-      sessionStorage.setItem(`clock-prompt-${today}`, "true")
+      // Mark that we've shown the prompt for today for this user
+      sessionStorage.setItem(`clock-prompt-${today}-${userId}`, "true")
       setIsOpen(false)
       router.refresh()
     } catch (error: unknown) {
@@ -137,8 +140,8 @@ export function ClockPromptModal({ attendance, settings, userId, today }: ClockP
 
       if (updateError) throw updateError
 
-      // Mark that we've shown the prompt for today
-      sessionStorage.setItem(`clock-prompt-${today}`, "true")
+      // Mark that we've shown the prompt for today for this user
+      sessionStorage.setItem(`clock-prompt-${today}-${userId}`, "true")
       setIsOpen(false)
       router.refresh()
     } catch (error: unknown) {
@@ -149,8 +152,8 @@ export function ClockPromptModal({ attendance, settings, userId, today }: ClockP
   }
 
   const handleDismiss = () => {
-    // Mark that we've shown the prompt for today
-    sessionStorage.setItem(`clock-prompt-${today}`, "true")
+    // Mark that we've shown the prompt for today for this user
+    sessionStorage.setItem(`clock-prompt-${today}-${userId}`, "true")
     setIsOpen(false)
   }
 

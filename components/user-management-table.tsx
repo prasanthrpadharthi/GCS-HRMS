@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { updateUserByAdmin } from "@/app/actions/update-user"
 import { verifyUserEmail } from "@/app/actions/verify-email"
 import { Button } from "@/components/ui/button"
 import {
@@ -132,22 +133,12 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
         updateData.salary = Number.parseFloat(formData.salary)
       }
 
-      const { error: updateError } = await supabase.from("users").update(updateData).eq("id", selectedUser.id)
+      // Use server action to perform admin update + auto-verify
+      const result = await updateUserByAdmin(selectedUser.id, updateData)
 
-      if (updateError) {
-        console.error("User update error:", updateError)
-        console.error("Error details:", JSON.stringify(updateError, null, 2))
-        throw new Error(updateError.message || "Failed to update user")
-      }
-
-      // Auto-verify user's email when admin updates their information
-      if (!selectedUser.email_verified) {
-        const verifyResult = await verifyUserEmail(selectedUser.id)
-        
-        if (!verifyResult.success) {
-          console.warn("Failed to auto-verify email:", verifyResult.error)
-          // Don't fail the user update, just log the warning
-        }
+      if (!result.success) {
+        console.error("Admin update failed:", result.error)
+        throw new Error(result.error || "Failed to update user")
       }
 
       await showAlert("Success", "User updated successfully!")
