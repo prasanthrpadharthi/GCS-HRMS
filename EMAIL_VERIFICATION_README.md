@@ -72,51 +72,41 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
    - Go to your Supabase Dashboard
    - Navigate to: Project Settings → API
    - Copy the `service_role` key (⚠️ Keep this secret!)
-   - ✅ **Already done!** Your key is set in `.env.local`
    
-2. **Run Database Migrations:**
-   - See detailed guide: `HOW_TO_RUN_SCRIPTS.md`
-   - Quick: Open Supabase SQL Editor and run:
-     - `scripts/011_add_email_verified.sql`
-     - `scripts/012_update_user_trigger_email_verified.sql`
-
-3. **Restart Development Server:**
-   ```bash
-   npm run dev
+2. **Add to Environment:**
+   ```env
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
    ```
 
-### For Admins - Manual Verification (Visual Guide)
+3. **Run Database Migrations:**
+   ```sql
+   -- Run in Supabase SQL Editor
+   -- 1. Add email_verified column
+   scripts/011_add_email_verified.sql
+   
+   -- 2. Update user creation trigger
+   scripts/012_update_user_trigger_email_verified.sql
+   ```
 
-📖 **See `VERIFY_BUTTON_GUIDE.md` for screenshots and detailed visual guide**
+### For Admins
 
 1. **View Unverified Users:**
    - Go to Dashboard → Manage Users
-   - The **"Verify Email"** button appears **row-wise** next to each unverified user
-   - Use the filter dropdown and select "Unverified" to see only unverified users
-   - You'll see a count of unverified users in the dropdown
+   - Use the filter dropdown and select "Unverified"
+   - You'll see a count of unverified users
 
-2. **Verify a User (Row-by-Row):**
-   - Find the user row with **"Verify Email"** button
-   - Click the **"Verify Email"** button in that specific row
+2. **Verify a User:**
+   - Find the user with "Verify Email" button
+   - Click "Verify Email"
    - Confirm the action in the dialog
-   - User's email is verified immediately
-   - Button changes to **"✓ Verified"** green badge
+   - User's email is verified in both auth system and users table
+   - User can now access the system
 
-### Auto-Verification for New Users ✨
-
-**NEW:** All new users are now **automatically verified** when created!
-
-1. **Create New Users:**
+3. **Create New Users:**
    - Click "Add User"
    - Fill in user details
-   - Click "Add User"
-   - ✅ User is automatically verified!
-   - Success message confirms: "User created and email verified successfully!"
-
-2. **No Manual Action Needed:**
-   - New users can log in immediately
-   - No need to click verify button
-   - Email is confirmed in Supabase auth automatically
+   - New users are created as unverified
+   - Manually verify them after creation
 
 ## UI Components
 
