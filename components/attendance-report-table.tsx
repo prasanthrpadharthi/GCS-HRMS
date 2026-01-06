@@ -199,11 +199,15 @@ export function AttendanceReportTable({
               const clockIn = new Date(`${record.date}T${record.clock_in}`)
               const clockOut = new Date(`${record.date}T${record.clock_out}`)
               const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-              // Subtract 1 hour for lunch break
-              const netHours = Math.max(0, hoursWorked - 1)
               
               // Check if there's a half-day paid leave on this date
               const leaveInfo = leavesByDate.get(record.date)
+              const isHalfDayLeave = leaveInfo && !leaveInfo.isFullDay
+              
+              // Don't deduct lunch if hours ≤ 5 or half-day leave scenario
+              const shouldDeductLunch = hoursWorked > 5 && !isHalfDayLeave
+              const netHours = shouldDeductLunch ? Math.max(0, hoursWorked - 1) : hoursWorked
+              
               if (leaveInfo && leaveInfo.isPaid && !leaveInfo.isFullDay) {
                 // Half day paid leave - add remaining hours to reach 8.5
                 const remainingHours = Math.max(0, 8.5 - netHours)
@@ -517,7 +521,7 @@ export function AttendanceReportTable({
         <p className="font-semibold mb-2">Singapore MOM Salary Calculation (Hours-Based with Paid Leave):</p>
         <ul className="list-disc list-inside space-y-1">
           <li>Expected Hours: 8.5 hours per day (9:30 AM - 7:00 PM with 1 hour lunch break)</li>
-          <li>Total Hours Worked: Sum of all daily hours (Clock Out - Clock In - 1 hour lunch)</li>
+          <li>Total Hours Worked: Sum of all daily hours (Clock Out - Clock In - 1 hour lunch if hours &gt; 5)</li>
           <li><strong>Paid Leave Logic:</strong>
             <ul className="list-disc list-inside ml-6 mt-1">
               <li>Full Day Paid Leave: Adds 8.5 hours to total hours worked</li>

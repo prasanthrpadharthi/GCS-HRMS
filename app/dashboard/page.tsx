@@ -56,7 +56,7 @@ export default async function DashboardPage() {
     .lte("date", formatDateToString(lastDay))
     .eq("status", "present")
 
-  // Calculate total hours worked (excluding 1 hour lunch break per day)
+  // Calculate total hours worked (deduct 1 hour lunch break only if hours > 5)
   let totalHoursWorked = 0
   if (attendanceRecords) {
     attendanceRecords.forEach((record) => {
@@ -64,8 +64,8 @@ export default async function DashboardPage() {
         const clockIn = new Date(`${record.date}T${record.clock_in}`)
         const clockOut = new Date(`${record.date}T${record.clock_out}`)
         const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-        // Subtract 1 hour for lunch break
-        const netHours = Math.max(0, hoursWorked - 1)
+        // Only deduct lunch if hours worked > 5
+        const netHours = hoursWorked > 5 ? Math.max(0, hoursWorked - 1) : hoursWorked
         totalHoursWorked += netHours
       }
     })

@@ -145,7 +145,7 @@ export function DashboardAttendanceCalendar({
     })
     
     if (leave) {
-      return { status: "leave", color: "bg-blue-200 text-blue-800 border-blue-400", hours: null }
+      return { status: "leave", color: "bg-blue-200 text-blue-800 border-blue-400", hours: null, clockIn: null, clockOut: null }
     }
     
     // Check attendance
@@ -157,7 +157,8 @@ export function DashboardAttendanceCalendar({
         const clockIn = new Date(`${dateString}T${attendanceRecord.clock_in}`)
         const clockOut = new Date(`${dateString}T${attendanceRecord.clock_out}`)
         const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-        hoursWorked = Math.max(0, totalHours - 1) // Subtract 1 hour lunch
+        // Only deduct lunch if hours > 5
+        hoursWorked = totalHours > 5 ? Math.max(0, totalHours - 1) : totalHours
       }
       
       if (attendanceRecord.status === "present") {
@@ -165,22 +166,32 @@ export function DashboardAttendanceCalendar({
           return { 
             status: "present-short", 
             color: "bg-orange-200 text-orange-800 border-orange-400", 
-            hours: hoursWorked.toFixed(1) 
+            hours: hoursWorked.toFixed(1),
+            clockIn: attendanceRecord.clock_in,
+            clockOut: attendanceRecord.clock_out
           }
         }
         return { 
           status: "present", 
           color: "bg-green-200 text-green-800 border-green-400", 
-          hours: hoursWorked > 0 ? hoursWorked.toFixed(1) : null 
+          hours: hoursWorked > 0 ? hoursWorked.toFixed(1) : null,
+          clockIn: attendanceRecord.clock_in,
+          clockOut: attendanceRecord.clock_out
         }
       }
       
       if (attendanceRecord.status === "absent") {
-        return { status: "absent", color: "bg-red-200 text-red-800 border-red-400", hours: null }
+        return { status: "absent", color: "bg-red-200 text-red-800 border-red-400", hours: null, clockIn: null, clockOut: null }
       }
       
       if (attendanceRecord.status === "half_day") {
-        return { status: "half_day", color: "bg-yellow-200 text-yellow-800 border-yellow-400", hours: hoursWorked > 0 ? hoursWorked.toFixed(1) : null }
+        return { 
+          status: "half_day", 
+          color: "bg-yellow-200 text-yellow-800 border-yellow-400", 
+          hours: hoursWorked > 0 ? hoursWorked.toFixed(1) : null,
+          clockIn: attendanceRecord.clock_in,
+          clockOut: attendanceRecord.clock_out
+        }
       }
     }
     
@@ -190,11 +201,11 @@ export function DashboardAttendanceCalendar({
     date.setHours(0, 0, 0, 0)
     
     if (date > today) {
-      return { status: "future", color: "bg-white text-gray-400", hours: null }
+      return { status: "future", color: "bg-white text-gray-400", hours: null, clockIn: null, clockOut: null }
     }
     
     // Absent by default for past dates
-    return { status: "absent", color: "bg-red-100 text-red-600 border-red-300", hours: null }
+    return { status: "absent", color: "bg-red-100 text-red-600 border-red-300", hours: null, clockIn: null, clockOut: null }
   }
 
   const renderCalendar = () => {
@@ -209,16 +220,28 @@ export function DashboardAttendanceCalendar({
       )
     }
     
+    // Helper function to format time to 12-hour format
+    const formatTime = (timeString: string | null) => {
+      if (!timeString) return ''
+      const [hours, minutes] = timeString.split(':')
+      const hour = parseInt(hours)
+      const ampm = hour >= 12 ? 'PM' : 'AM'
+      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
+      return `${displayHour}:${minutes}${ampm}`
+    }
+    
     // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      const { status, color, hours } = getDateStatus(day)
+      const { status, color, hours, clockIn, clockOut } = getDateStatus(day)
       days.push(
         <div
           key={day}
           className={`aspect-square p-1 border-2 ${color} rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all hover:shadow-md`}
         >
-          <span className="text-xs sm:text-sm">{day}</span>
-          {hours && <span className="text-[10px] font-normal">{hours}h</span>}
+          <span className="text-xs sm:text-sm font-bold">{day}</span>
+          {hours && <span className="text-[10px] font-semibold">{hours}h</span>}
+          {clockIn && <span className="text-[9px] font-normal leading-tight">{formatTime(clockIn)}</span>}
+          {clockOut && <span className="text-[9px] font-normal leading-tight">{formatTime(clockOut)}</span>}
         </div>
       )
     }

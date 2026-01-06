@@ -212,7 +212,8 @@ export function AttendanceCalendar({ attendance: initialAttendance, leaves: init
               const clockIn = new Date(`${record.date}T${record.clock_in}`)
               const clockOut = new Date(`${record.date}T${record.clock_out}`)
               const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-              hoursWorked = Math.max(0, totalHours - 1) // Subtract 1 hour lunch
+              // Only deduct lunch if hours > 5
+              hoursWorked = totalHours > 5 ? Math.max(0, totalHours - 1) : totalHours
               deficitHours = 8.5 - hoursWorked
             }
 
