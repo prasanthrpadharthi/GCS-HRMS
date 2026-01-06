@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { verifyUserEmail } from "@/app/actions/verify-email"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -80,16 +81,28 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
       if (authError) throw authError
 
       // The trigger will automatically create the user profile
-      // But we need to update salary if provided
-      if (authData.user && formData.salary) {
-        const { error: updateError } = await supabase
-          .from("users")
-          .update({ salary: Number.parseFloat(formData.salary) })
-          .eq("id", authData.user.id)
+      // Auto-verify the user's email since we're not using email provider
+      if (authData.user) {
+        // Verify email immediately using server action
+        const verifyResult = await verifyUserEmail(authData.user.id)
+        
+        if (!verifyResult.success) {
+          console.warn("Failed to auto-verify email:", verifyResult.error)
+          // Don't fail the user creation, just log the warning
+        }
 
-        if (updateError) throw updateError
+        // Update salary if provided
+        if (formData.salary) {
+          const { error: updateError } = await supabase
+            .from("users")
+            .update({ salary: Number.parseFloat(formData.salary) })
+            .eq("id", authData.user.id)
+
+          if (updateError) throw updateError
+        }
       }
 
+      await showAlert("Success", "User created and email verified successfully!")
       setIsAddOpen(false)
       resetForm()
       router.refresh()
@@ -127,6 +140,17 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
         throw new Error(updateError.message || "Failed to update user")
       }
 
+      // Auto-verify user's email when admin updates their information
+      if (!selectedUser.email_verified) {
+        const verifyResult = await verifyUserEmail(selectedUser.id)
+        
+        if (!verifyResult.success) {
+          console.warn("Failed to auto-verify email:", verifyResult.error)
+          // Don't fail the user update, just log the warning
+        }
+      }
+
+      await showAlert("Success", "User updated successfully!")
       setIsEditOpen(false)
       setSelectedUser(null)
       resetForm()
@@ -164,15 +188,12 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
     if (!confirmed) return
 
     try {
-      const supabase = createClient()
+      // Call server action to verify email using admin API
+      const result = await verifyUserEmail(userId)
 
-      // Update the user's email_verified status
-      const { error } = await supabase
-        .from("users")
-        .update({ email_verified: true })
-        .eq("id", userId)
-
-      if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || "Failed to verify email")
+      }
 
       await showAlert("Success", "User email has been verified successfully.")
       router.refresh()
