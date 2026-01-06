@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { LoadingSpinner } from "@/components/ui/loading"
+import { formatDateToString } from "@/lib/utils"
 
 interface DashboardAttendanceCalendarProps {
   userId: string
@@ -43,8 +44,8 @@ export function DashboardAttendanceCalendar({
         .from("attendance")
         .select("*")
         .eq("user_id", userId)
-        .gte("date", firstDay.toISOString().split("T")[0])
-        .lte("date", lastDay.toISOString().split("T")[0])
+        .gte("date", formatDateToString(firstDay))
+        .lte("date", formatDateToString(lastDay))
       
       // Fetch leaves
       const { data: leavesData } = await supabase
@@ -52,8 +53,8 @@ export function DashboardAttendanceCalendar({
         .select("*, leave_type:leave_types(*)")
         .eq("user_id", userId)
         .eq("status", "approved")
-        .gte("from_date", firstDay.toISOString().split("T")[0])
-        .lte("to_date", lastDay.toISOString().split("T")[0])
+        .gte("from_date", formatDateToString(firstDay))
+        .lte("to_date", formatDateToString(lastDay))
       
       // Fetch settings
       const { data: settingsData } = await supabase
@@ -129,7 +130,7 @@ export function DashboardAttendanceCalendar({
 
   const getDateStatus = (day: number) => {
     const date = new Date(selectedYear, selectedMonth - 1, day)
-    const dateString = date.toISOString().split("T")[0]
+    const dateString = formatDateToString(date)
     
     // Check if it's a weekend
     if (isWeekend(date)) {

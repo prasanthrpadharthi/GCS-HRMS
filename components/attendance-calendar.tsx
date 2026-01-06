@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useAlert } from "@/components/ui/alert-custom"
 import { LoadingSpinner } from "@/components/ui/loading"
+import { formatDateToString } from "@/lib/utils"
 
 interface AttendanceCalendarProps {
   attendance: Attendance[]
@@ -46,9 +47,6 @@ export function AttendanceCalendar({ attendance: initialAttendance, leaves: init
   const currentYear = new Date().getFullYear()
   const years = Array.from({ length: 3 }, (_, i) => currentYear - i)
 
-  const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 3 }, (_, i) => currentYear - i)
-
   const fetchData = async () => {
     setIsLoading(true)
     try {
@@ -64,8 +62,8 @@ export function AttendanceCalendar({ attendance: initialAttendance, leaves: init
         .from("attendance")
         .select("*")
         .eq("user_id", userId)
-        .gte("date", firstDay.toISOString().split("T")[0])
-        .lte("date", lastDay.toISOString().split("T")[0])
+        .gte("date", formatDateToString(firstDay))
+        .lte("date", formatDateToString(lastDay))
         .order("date", { ascending: false })
       
       // Fetch leaves
@@ -73,8 +71,8 @@ export function AttendanceCalendar({ attendance: initialAttendance, leaves: init
         .from("leaves")
         .select("*, leave_type:leave_types(*)")
         .eq("user_id", userId)
-        .gte("from_date", firstDay.toISOString().split("T")[0])
-        .lte("to_date", lastDay.toISOString().split("T")[0])
+        .gte("from_date", formatDateToString(firstDay))
+        .lte("to_date", formatDateToString(lastDay))
         .order("from_date", { ascending: false })
       
       setAttendance(attendanceData || [])

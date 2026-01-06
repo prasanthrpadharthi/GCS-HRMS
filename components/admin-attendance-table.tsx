@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { LoadingSpinner } from "@/components/ui/loading"
 import { useAlert } from "@/components/ui/alert-custom"
+import { formatDateToString } from "@/lib/utils"
 
 interface AdminAttendanceTableProps {
   initialAttendance: Attendance[]
@@ -96,8 +97,8 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
       const { data } = await supabase
         .from("attendance")
         .select("*, user:users!attendance_user_id_fkey(id, full_name, email)")
-        .gte("date", firstDay.toISOString().split("T")[0])
-        .lte("date", lastDay.toISOString().split("T")[0])
+        .gte("date", formatDateToString(firstDay))
+        .lte("date", formatDateToString(lastDay))
         .order("date", { ascending: false })
       
       setAttendance(data || [])

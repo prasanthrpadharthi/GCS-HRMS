@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Download } from "lucide-react"
 import type { User } from "@/lib/types"
 import { LoadingSpinner } from "@/components/ui/loading"
+import { formatDateToString } from "@/lib/utils"
 
 interface AttendanceReportTableProps {
   currentUserId: string
@@ -98,11 +99,11 @@ export function AttendanceReportTable({
       const year = Number.parseInt(selectedYear)
       const month = Number.parseInt(selectedMonth)
 
-      // Get date range
+      // Get date range - use proper date formatting without timezone conversion
       const firstDay = new Date(year, month - 1, 1)
       const lastDay = new Date(year, month, 0)
-      const startDate = firstDay.toISOString().split("T")[0]
-      const endDate = lastDay.toISOString().split("T")[0]
+      const startDate = formatDateToString(firstDay)
+      const endDate = formatDateToString(lastDay)
       const daysInMonth = lastDay.getDate()
 
       // Get company settings for working days
@@ -153,7 +154,7 @@ export function AttendanceReportTable({
           const currentDate = new Date(fromDate)
           
           while (currentDate <= toDate) {
-            const dateString = currentDate.toISOString().split("T")[0]
+            const dateString = formatDateToString(currentDate)
             const dayName = currentDate.toLocaleDateString("en-US", { weekday: "long" })
             
             // Skip weekends
@@ -170,10 +171,10 @@ export function AttendanceReportTable({
                 }
               } else {
                 // Multi-day leave - check first and last days
-                if (currentDate.toISOString().split("T")[0] === leave.from_date && leave.from_session === "afternoon") {
+                if (formatDateToString(currentDate) === leave.from_date && leave.from_session === "afternoon") {
                   isFullDay = false
                   session = "afternoon"
-                } else if (currentDate.toISOString().split("T")[0] === leave.to_date && leave.to_session === "morning") {
+                } else if (formatDateToString(currentDate) === leave.to_date && leave.to_session === "morning") {
                   isFullDay = false
                   session = "morning"
                 }
@@ -231,7 +232,7 @@ export function AttendanceReportTable({
             const currentDate = new Date(fromDate)
             
             while (currentDate <= toDate) {
-              const dateString = currentDate.toISOString().split("T")[0]
+              const dateString = formatDateToString(currentDate)
               const dayName = currentDate.toLocaleDateString("en-US", { weekday: "long" })
               
               // Skip weekends
