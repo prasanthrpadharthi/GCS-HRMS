@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CalendarCheck, Users, FileText, Calendar } from "lucide-react"
 import Link from "next/link"
 import { ClockPromptModal } from "@/components/clock-prompt-modal"
+import { DashboardAttendanceCalendar } from "@/components/dashboard-attendance-calendar"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -194,6 +195,19 @@ export default async function DashboardPage() {
           </Card>
         </Link>
       </div>
+
+      {/* Attendance Calendar View */}
+      <Card className="border-amber-200 bg-white/80 backdrop-blur">
+        <CardHeader>
+          <CardTitle className="text-amber-900">My Attendance Calendar</CardTitle>
+          <CardDescription className="text-amber-700">
+            Visual overview of your attendance, leaves, and working hours
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DashboardAttendanceCalendar userId={user.id} />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Link href="/dashboard/attendance">

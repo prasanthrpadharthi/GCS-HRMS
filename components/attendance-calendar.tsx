@@ -1,22 +1,98 @@
 "use client"
 
+import { useState } from "react"
 import type { Attendance, Leave } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Trash2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useAlert } from "@/components/ui/alert-custom"
+import { LoadingSpinner } from "@/components/ui/loading"
 
 interface AttendanceCalendarProps {
   attendance: Attendance[]
   leaves: Leave[]
   userId: string
+  initialMonth?: number
+  initialYear?: number
 }
 
-export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCalendarProps) {
+export function AttendanceCalendar({ attendance: initialAttendance, leaves: initialLeaves, userId, initialMonth, initialYear }: AttendanceCalendarProps) {
   const { showAlert, showConfirm } = useAlert()
   const router = useRouter()
+  const [attendance, setAttendance] = useState(initialAttendance)
+  const [leaves, setLeaves] = useState(initialLeaves)
+  const [selectedMonth, setSelectedMonth] = useState((initialMonth || new Date().getMonth() + 1).toString())
+  const [selectedYear, setSelectedYear] = useState((initialYear || new Date().getFullYear()).toString())
+  const [isLoading, setIsLoading] = useState(false)
+
+  const months = [
+    { value: "1", label: "January" },
+    { value: "2", label: "February" },
+    { value: "3", label: "March" },
+    { value: "4", label: "April" },
+    { value: "5", label: "May" },
+    { value: "6", label: "June" },
+    { value: "7", label: "July" },
+    { value: "8", label: "August" },
+    { value: "9", label: "September" },
+    { value: "10", label: "October" },
+    { value: "11", label: "November" },
+    { value: "12", label: "December" },
+  ]
+
+  const currentYear = new Date().getFullYear()
+  const years = Array.from({ length: 3 }, (_, i) => currentYear - i)
+
+  const currentYear = new Date().getFullYear()
+  const years = Array.from({ length: 3 }, (_, i) => currentYear - i)
+
+  const fetchData = async () => {
+    setIsLoading(true)
+    try {
+      const supabase = createClient()
+      const year = parseInt(selectedYear)
+      const month = parseInt(selectedMonth)
+      
+      const firstDay = new Date(year, month - 1, 1)
+      const lastDay = new Date(year, month, 0)
+      
+      // Fetch attendance
+      const { data: attendanceData } = await supabase
+        .from("attendance")
+        .select("*")
+        .eq("user_id", userId)
+        .gte("date", firstDay.toISOString().split("T")[0])
+        .lte("date", lastDay.toISOString().split("T")[0])
+        .order("date", { ascending: false })
+      
+      // Fetch leaves
+      const { data: leavesData } = await supabase
+        .from("leaves")
+        .select("*, leave_type:leave_types(*)")
+        .eq("user_id", userId)
+        .gte("from_date", firstDay.toISOString().split("T")[0])
+        .lte("to_date", lastDay.toISOString().split("T")[0])
+        .order("from_date", { ascending: false })
+      
+      setAttendance(attendanceData || [])
+      setLeaves(leavesData || [])
+    } catch (error) {
+      console.error("Error fetching data:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleMonthChange = (value: string) => {
+    setSelectedMonth(value)
+  }
+
+  const handleYearChange = (value: string) => {
+    setSelectedYear(value)
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -86,12 +162,51 @@ export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCal
   }
 
   return (
-    <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-      {sortedAttendance.length === 0 && sortedLeaves.length === 0 ? (
-        <p className="text-center text-amber-700 py-8">No attendance records for this month</p>
+    <div className="space-y-4">
+      {/* Month and Year Selectors */}
+      <div className="flex gap-4 items-center">
+        <Select value={selectedMonth} onValueChange={handleMonthChange}>
+          <SelectTrigger className="w-[140px] border-amber-200">
+            <SelectValue placeholder="Select month" />
+          </SelectTrigger>
+          <SelectContent>
+            {months.map((month) => (
+              <SelectItem key={month.value} value={month.value}>
+                {month.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={selectedYear} onValueChange={handleYearChange}>
+          <SelectTrigger className="w-[100px] border-amber-200">
+            <SelectValue placeholder="Year" />
+          </SelectTrigger>
+          <SelectContent>
+            {years.map((year) => (
+              <SelectItem key={year} value={year.toString()}>
+                {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button onClick={fetchData} disabled={isLoading} className="bg-amber-600 hover:bg-amber-700">
+          {isLoading ? "Loading..." : "Load"}
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <LoadingSpinner />
+        </div>
       ) : (
-        <>
-          {sortedAttendance.map((record) => {
+        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+          {sortedAttendance.length === 0 && sortedLeaves.length === 0 ? (
+            <p className="text-center text-amber-700 py-8">No attendance records for this period</p>
+          ) : (
+            <>
+              {sortedAttendance.map((record) => {
             // Calculate hours worked and deficit
             let hoursWorked = 0
             let deficitHours = 0
@@ -191,6 +306,8 @@ export function AttendanceCalendar({ attendance, leaves, userId }: AttendanceCal
             </div>
           ))}
         </>
+      )}
+    </div>
       )}
     </div>
   )

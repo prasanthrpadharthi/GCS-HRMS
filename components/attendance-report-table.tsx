@@ -143,9 +143,55 @@ export function AttendanceReportTable({
         // Calculate metrics
         const presentDays = attendance?.filter((a) => a.status === "present").length || 0
         
+        // Build a map of leaves by date for easy lookup
+        const leavesByDate = new Map<string, { isPaid: boolean, isFullDay: boolean, session: string }>()
+        
+        leaves?.forEach((leave) => {
+          const isPaid = leave.leave_type?.is_paid || false
+          const fromDate = new Date(leave.from_date)
+          const toDate = new Date(leave.to_date)
+          const currentDate = new Date(fromDate)
+          
+          while (currentDate <= toDate) {
+            const dateString = currentDate.toISOString().split("T")[0]
+            const dayName = currentDate.toLocaleDateString("en-US", { weekday: "long" })
+            
+            // Skip weekends
+            if (!weekendDays.includes(dayName)) {
+              let isFullDay = true
+              let session = "full"
+              
+              // Check if it's a partial day
+              if (leave.from_date === leave.to_date) {
+                // Single day leave
+                if (leave.from_session !== "full" || leave.to_session !== "full") {
+                  isFullDay = false
+                  session = leave.from_session
+                }
+              } else {
+                // Multi-day leave - check first and last days
+                if (currentDate.toISOString().split("T")[0] === leave.from_date && leave.from_session === "afternoon") {
+                  isFullDay = false
+                  session = "afternoon"
+                } else if (currentDate.toISOString().split("T")[0] === leave.to_date && leave.to_session === "morning") {
+                  isFullDay = false
+                  session = "morning"
+                }
+              }
+              
+              leavesByDate.set(dateString, { isPaid, isFullDay, session })
+            }
+            
+            currentDate.setDate(currentDate.getDate() + 1)
+          }
+        })
+        
         // Calculate total hours worked (excluding 1 hour lunch break per day)
+        // For paid leaves: Add 8.5 hours for full day, or remaining hours for half day
         let totalHoursWorked = 0
         let deficitHours = 0
+        let paidLeaveHours = 0
+        
         if (attendance) {
           attendance.forEach((record) => {
             if (record.clock_in && record.clock_out && record.status === "present") {
@@ -154,21 +200,62 @@ export function AttendanceReportTable({
               const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
               // Subtract 1 hour for lunch break
               const netHours = Math.max(0, hoursWorked - 1)
-              totalHoursWorked += netHours
               
-              // Calculate deficit for this day (8.5 expected - actual hours)
-              const dayDeficit = 8.5 - netHours
-              if (dayDeficit > 0) {
-                deficitHours += dayDeficit
+              // Check if there's a half-day paid leave on this date
+              const leaveInfo = leavesByDate.get(record.date)
+              if (leaveInfo && leaveInfo.isPaid && !leaveInfo.isFullDay) {
+                // Half day paid leave - add remaining hours to reach 8.5
+                const remainingHours = Math.max(0, 8.5 - netHours)
+                paidLeaveHours += remainingHours
+                totalHoursWorked += netHours + remainingHours
+              } else {
+                totalHoursWorked += netHours
+                
+                // Calculate deficit for this day (8.5 expected - actual hours)
+                const dayDeficit = 8.5 - netHours
+                if (dayDeficit > 0) {
+                  deficitHours += dayDeficit
+                }
               }
             }
           })
         }
         
+        // Add full day paid leaves as 8.5 hours each
+        leaves?.forEach((leave) => {
+          const isPaid = leave.leave_type?.is_paid || false
+          
+          if (isPaid) {
+            const fromDate = new Date(leave.from_date)
+            const toDate = new Date(leave.to_date)
+            const currentDate = new Date(fromDate)
+            
+            while (currentDate <= toDate) {
+              const dateString = currentDate.toISOString().split("T")[0]
+              const dayName = currentDate.toLocaleDateString("en-US", { weekday: "long" })
+              
+              // Skip weekends
+              if (!weekendDays.includes(dayName)) {
+                const leaveInfo = leavesByDate.get(dateString)
+                
+                // Only count if it's a full day leave AND there's no attendance record for this date
+                const hasAttendance = attendance?.some(a => a.date === dateString)
+                
+                if (leaveInfo && leaveInfo.isFullDay && !hasAttendance) {
+                  paidLeaveHours += 8.5
+                  totalHoursWorked += 8.5
+                }
+              }
+              
+              currentDate.setDate(currentDate.getDate() + 1)
+            }
+          }
+        })
+        
         // Calculate effective days (total hours / 8.5 hours per day)
         const effectiveDays = totalHoursWorked > 0 ? totalHoursWorked / 8.5 : 0
         
-        // Calculate total leave days excluding weekends
+        // Calculate total leave days excluding weekends (for display purposes)
         let totalLeaveDays = 0
         let paidLeaveDays = 0
         let unpaidLeaveDays = 0
@@ -223,11 +310,10 @@ export function AttendanceReportTable({
         if (user.salary) {
           const salaryPerDay = calculateSalaryPerDay(user.salary, workingDays)
 
-          // Use effective days (based on hours worked) instead of just present days
-          // Salary = (Effective days + Paid leave days) * Daily rate
-          const totalPaidDays = effectiveDays + paidLeaveDays
-
-          calculatedSalary = totalPaidDays * salaryPerDay
+          // Use effective days (based on total hours including paid leave hours)
+          // Total hours already includes paid leave hours adjustment
+          // Salary = Effective Days × Daily rate
+          calculatedSalary = effectiveDays * salaryPerDay
         }
 
         reports.push({
@@ -427,15 +513,22 @@ export function AttendanceReportTable({
       )}
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
-        <p className="font-semibold mb-2">Singapore MOM Salary Calculation (Hours-Based):</p>
+        <p className="font-semibold mb-2">Singapore MOM Salary Calculation (Hours-Based with Paid Leave):</p>
         <ul className="list-disc list-inside space-y-1">
           <li>Expected Hours: 8.5 hours per day (9:30 AM - 7:00 PM with 1 hour lunch break)</li>
           <li>Total Hours Worked: Sum of all daily hours (Clock Out - Clock In - 1 hour lunch)</li>
-          <li>Deficit Hours: Total hours short of expected hours (only counting shortfalls, not excess)</li>
-          <li>Effective Days = Total Hours Worked ÷ 8.5 hours</li>
+          <li><strong>Paid Leave Logic:</strong>
+            <ul className="list-disc list-inside ml-6 mt-1">
+              <li>Full Day Paid Leave: Adds 8.5 hours to total hours worked</li>
+              <li>Half Day Paid Leave: Adds remaining hours needed to reach 8.5 hours for that day</li>
+              <li>Example: If employee works 4 hours and takes half-day paid leave, system adds 4.5 hours (8.5 - 4 = 4.5)</li>
+            </ul>
+          </li>
+          <li>Deficit Hours: Total hours short of expected hours (only counting shortfalls on non-leave days)</li>
+          <li>Effective Days = Total Hours Worked (including paid leave adjustments) ÷ 8.5 hours</li>
           <li>Daily Rate = Monthly Salary ÷ Number of Working Days in Month</li>
-          <li>Calculated Salary = (Effective Days + Paid Leave Days) × Daily Rate</li>
-          <li>Unpaid leaves are deducted from the calculated salary</li>
+          <li>Calculated Salary = Effective Days × Daily Rate</li>
+          <li>Unpaid leaves reduce the effective days in the calculation</li>
           <li>Weekends (Saturday & Sunday) are excluded from working days calculation</li>
         </ul>
       </div>
