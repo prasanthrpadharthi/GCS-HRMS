@@ -12,12 +12,14 @@ interface DashboardAttendanceCalendarProps {
   userId: string
   initialMonth?: number
   initialYear?: number
+  isAdmin?: boolean
 }
 
 export function DashboardAttendanceCalendar({ 
   userId, 
   initialMonth = new Date().getMonth() + 1, 
-  initialYear = new Date().getFullYear() 
+  initialYear = new Date().getFullYear(),
+  isAdmin = false
 }: DashboardAttendanceCalendarProps) {
   const [selectedMonth, setSelectedMonth] = useState(initialMonth)
   const [selectedYear, setSelectedYear] = useState(initialYear)
@@ -25,6 +27,8 @@ export function DashboardAttendanceCalendar({
   const [leaves, setLeaves] = useState<Leave[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [settings, setSettings] = useState<any>(null)
+  const [allUsersAttendance, setAllUsersAttendance] = useState<Attendance[]>([])
+  const [allUsersLeaves, setAllUsersLeaves] = useState<Leave[]>([])
 
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -39,22 +43,43 @@ export function DashboardAttendanceCalendar({
       const firstDay = new Date(year, month - 1, 1)
       const lastDay = new Date(year, month, 0)
       
-      // Fetch attendance
-      const { data: attendanceData } = await supabase
-        .from("attendance")
-        .select("*")
-        .eq("user_id", userId)
-        .gte("date", formatDateToString(firstDay))
-        .lte("date", formatDateToString(lastDay))
-      
-      // Fetch leaves
-      const { data: leavesData } = await supabase
-        .from("leaves")
-        .select("*, leave_type:leave_types(*)")
-        .eq("user_id", userId)
-        .eq("status", "approved")
-        .gte("from_date", formatDateToString(firstDay))
-        .lte("to_date", formatDateToString(lastDay))
+      if (isAdmin) {
+        // For admin, fetch all users' attendance and leaves
+        const { data: attendanceData } = await supabase
+          .from("attendance")
+          .select("*, user:users!attendance_user_id_fkey(id, full_name, email)")
+          .gte("date", formatDateToString(firstDay))
+          .lte("date", formatDateToString(lastDay))
+        
+        const { data: leavesData } = await supabase
+          .from("leaves")
+          .select("*, user:users!leaves_user_id_fkey(id, full_name, email), leave_type:leave_types(*)")
+          .eq("status", "approved")
+          .gte("from_date", formatDateToString(firstDay))
+          .lte("to_date", formatDateToString(lastDay))
+        
+        setAllUsersAttendance(attendanceData || [])
+        setAllUsersLeaves(leavesData || [])
+      } else {
+        // For regular users, fetch only their data
+        const { data: attendanceData } = await supabase
+          .from("attendance")
+          .select("*")
+          .eq("user_id", userId)
+          .gte("date", formatDateToString(firstDay))
+          .lte("date", formatDateToString(lastDay))
+        
+        const { data: leavesData } = await supabase
+          .from("leaves")
+          .select("*, leave_type:leave_types(*)")
+          .eq("user_id", userId)
+          .eq("status", "approved")
+          .gte("from_date", formatDateToString(firstDay))
+          .lte("to_date", formatDateToString(lastDay))
+        
+        setAttendance(attendanceData || [])
+        setLeaves(leavesData || [])
+      }
       
       // Fetch settings
       const { data: settingsData } = await supabase
@@ -62,8 +87,6 @@ export function DashboardAttendanceCalendar({
         .select("*")
         .single()
       
-      setAttendance(attendanceData || [])
-      setLeaves(leavesData || [])
       setSettings(settingsData)
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -137,6 +160,40 @@ export function DashboardAttendanceCalendar({
       return { status: "weekend", color: "bg-gray-200 text-gray-500", hours: null }
     }
     
+    if (isAdmin) {
+      // Admin view: show count of users in office and on leave
+      const inOfficeCount = allUsersAttendance.filter(a => 
+        a.date === dateString && a.clock_in
+      ).length
+      
+      const onLeaveCount = allUsersLeaves.filter(l => {
+        const fromDate = new Date(l.from_date)
+        const toDate = new Date(l.to_date)
+        return date >= fromDate && date <= toDate
+      }).length
+      
+      // Check if date is in the future
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      date.setHours(0, 0, 0, 0)
+      
+      if (date > today) {
+        return { status: "future", color: "bg-white text-gray-400", inOffice: 0, onLeave: 0 }
+      }
+      
+      if (inOfficeCount > 0 || onLeaveCount > 0) {
+        return { 
+          status: "admin-view", 
+          color: "bg-amber-50 text-amber-900 border-amber-300", 
+          inOffice: inOfficeCount,
+          onLeave: onLeaveCount
+        }
+      }
+      
+      return { status: "admin-view", color: "bg-gray-50 text-gray-600", inOffice: 0, onLeave: 0 }
+    }
+    
+    // Regular user view
     // Check if there's a leave for this date
     const leave = leaves.find(l => {
       const fromDate = new Date(l.from_date)
@@ -232,18 +289,48 @@ export function DashboardAttendanceCalendar({
     
     // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      const { status, color, hours, clockIn, clockOut } = getDateStatus(day)
-      days.push(
-        <div
-          key={day}
-          className={`aspect-square p-1 border-2 ${color} rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all hover:shadow-md`}
-        >
-          <span className="text-xs sm:text-sm font-bold">{day}</span>
-          {hours && <span className="text-[10px] font-semibold">{hours}h</span>}
-          {clockIn && <span className="text-[9px] font-normal leading-tight">{formatTime(clockIn)}</span>}
-          {clockOut && <span className="text-[9px] font-normal leading-tight">{formatTime(clockOut)}</span>}
-        </div>
-      )
+      const dateStatus = getDateStatus(day)
+      
+      if (isAdmin) {
+        // Admin view: show count of in-office and on-leave users
+        const { status, color, inOffice, onLeave } = dateStatus as any
+        days.push(
+          <div
+            key={day}
+            className={`aspect-square p-1 border-2 ${color} rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all hover:shadow-md`}
+          >
+            <span className="text-xs sm:text-sm font-bold">{day}</span>
+            {(inOffice > 0 || onLeave > 0) && (
+              <>
+                {inOffice > 0 && (
+                  <span className="text-[10px] font-semibold text-green-700">
+                    ✓ {inOffice}
+                  </span>
+                )}
+                {onLeave > 0 && (
+                  <span className="text-[10px] font-semibold text-blue-700">
+                    ◐ {onLeave}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        )
+      } else {
+        // Regular user view: show hours and clock times
+        const { status, color, hours, clockIn, clockOut } = dateStatus as any
+        days.push(
+          <div
+            key={day}
+            className={`aspect-square p-1 border-2 ${color} rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all hover:shadow-md`}
+          >
+            <span className="text-xs sm:text-sm font-bold">{day}</span>
+            {hours && <span className="text-[10px] font-semibold">{hours}h</span>}
+            {clockIn && <span className="text-[9px] font-normal leading-tight">{formatTime(clockIn)}</span>}
+            {clockOut && <span className="text-[9px] font-normal leading-tight">{formatTime(clockOut)}</span>}
+          </div>
+        )
+      }
     }
     
     return days
@@ -304,26 +391,45 @@ export function DashboardAttendanceCalendar({
 
           {/* Legend */}
           <div className="flex flex-wrap gap-3 pt-4 border-t border-amber-200 text-xs">
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-green-200 border-2 border-green-400 rounded"></div>
-              <span className="text-amber-900">Present (≥8.5h)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-orange-200 border-2 border-orange-400 rounded"></div>
-              <span className="text-amber-900">Present (&lt;8.5h)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-blue-200 border-2 border-blue-400 rounded"></div>
-              <span className="text-amber-900">Leave</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
-              <span className="text-amber-900">Absent</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-4 h-4 bg-gray-200 border-2 border-gray-300 rounded"></div>
-              <span className="text-amber-900">Weekend</span>
-            </div>
+            {isAdmin ? (
+              <>
+                <div className="flex items-center gap-1">
+                  <span className="text-green-700 font-bold">✓</span>
+                  <span className="text-amber-900">In Office</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-blue-700 font-bold">◐</span>
+                  <span className="text-amber-900">On Leave</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-gray-200 border-2 border-gray-300 rounded"></div>
+                  <span className="text-amber-900">Weekend</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-green-200 border-2 border-green-400 rounded"></div>
+                  <span className="text-amber-900">Present (≥8.5h)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-orange-200 border-2 border-orange-400 rounded"></div>
+                  <span className="text-amber-900">Present (&lt;8.5h)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-blue-200 border-2 border-blue-400 rounded"></div>
+                  <span className="text-amber-900">Leave</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
+                  <span className="text-amber-900">Absent</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-gray-200 border-2 border-gray-300 rounded"></div>
+                  <span className="text-amber-900">Weekend</span>
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

@@ -130,13 +130,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Clock In/Out Prompt Modal */}
-      <ClockPromptModal 
-        attendance={todayAttendance} 
-        settings={settings} 
-        userId={user.id} 
-        today={today} 
-      />
+      {/* Clock In/Out Prompt Modal - Not shown for admin */}
+      {userData?.role !== "admin" && (
+        <ClockPromptModal 
+          attendance={todayAttendance} 
+          settings={settings} 
+          userId={user.id} 
+          today={today} 
+        />
+      )}
 
       <div>
         <h1 className="text-3xl font-bold text-amber-900">Welcome, {userData?.full_name}!</h1>
@@ -200,13 +202,18 @@ export default async function DashboardPage() {
       {/* Attendance Calendar View */}
       <Card className="border-amber-200 bg-white/80 backdrop-blur">
         <CardHeader>
-          <CardTitle className="text-amber-900">My Attendance Calendar</CardTitle>
+          <CardTitle className="text-amber-900">
+            {userData?.role === "admin" ? "Team Attendance Overview" : "My Attendance Calendar"}
+          </CardTitle>
           <CardDescription className="text-amber-700">
-            Visual overview of your attendance, leaves, and working hours
+            {userData?.role === "admin" 
+              ? "Date-wise view of employees in office and on leave"
+              : "Visual overview of your attendance, leaves, and working hours"
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <DashboardAttendanceCalendar userId={user.id} />
+          <DashboardAttendanceCalendar userId={user.id} isAdmin={userData?.role === "admin"} />
         </CardContent>
       </Card>
 

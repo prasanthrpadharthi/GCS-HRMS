@@ -78,8 +78,14 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
     const outTotalMinutes = outHours * 60 + outMinutes
     
     const diffMinutes = outTotalMinutes - inTotalMinutes
-    const hours = Math.floor(diffMinutes / 60)
-    const minutes = diffMinutes % 60
+    const totalHours = diffMinutes / 60
+    
+    // Don't deduct lunch if hours ≤ 5, otherwise deduct 1 hour for lunch
+    const shouldDeductLunch = totalHours > 5
+    const netHours = shouldDeductLunch ? Math.max(0, totalHours - 1) : totalHours
+    
+    const hours = Math.floor(netHours)
+    const minutes = Math.round((netHours - hours) * 60)
     
     return `${hours}h ${minutes}m`
   }

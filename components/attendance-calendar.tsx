@@ -237,7 +237,15 @@ export function AttendanceCalendar({ attendance: initialAttendance, leaves: init
                   </div>
                   {record.clock_in && record.clock_out && (
                     <div className="flex gap-2 mt-1 text-xs">
-                      <span className="text-blue-700 font-medium">{hoursWorked.toFixed(1)} hrs</span>
+                      <span className="text-blue-700 font-medium">
+                        {hoursWorked.toFixed(1)} hrs
+                        {(() => {
+                          const clockIn = new Date(`${record.date}T${record.clock_in}`)
+                          const clockOut = new Date(`${record.date}T${record.clock_out}`)
+                          const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
+                          return totalHours <= 5 ? " (no lunch)" : " (1h lunch deducted)"
+                        })()}
+                      </span>
                       {deficitHours > 0 && (
                         <span className="text-red-600 font-medium">(-{deficitHours.toFixed(1)} hrs)</span>
                       )}
