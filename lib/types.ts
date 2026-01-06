@@ -7,6 +7,7 @@ export interface User {
   role: UserRole
   salary?: number
   must_change_password: boolean
+  email_verified: boolean
   created_at: string
   updated_at: string
 }

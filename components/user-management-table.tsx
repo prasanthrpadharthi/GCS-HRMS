@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Trash2, Edit } from "lucide-react"
+import { Plus, Trash2, Edit, CheckCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAlert } from "@/components/ui/alert-custom"
 import type { User } from "@/lib/types"
@@ -33,6 +33,7 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [filterVerified, setFilterVerified] = useState<"all" | "verified" | "unverified">("all")
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -155,6 +156,31 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
     }
   }
 
+  const handleVerifyEmail = async (userId: string) => {
+    const confirmed = await showConfirm(
+      "Verify User Email", 
+      "Are you sure you want to manually verify this user's email? This will allow them to access the system."
+    )
+    if (!confirmed) return
+
+    try {
+      const supabase = createClient()
+
+      // Update the user's email_verified status
+      const { error } = await supabase
+        .from("users")
+        .update({ email_verified: true })
+        .eq("id", userId)
+
+      if (error) throw error
+
+      await showAlert("Success", "User email has been verified successfully.")
+      router.refresh()
+    } catch (error: unknown) {
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
+    }
+  }
+
   const openEditDialog = (user: User) => {
     setSelectedUser(user)
     setFormData({
@@ -167,9 +193,42 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
     setIsEditOpen(true)
   }
 
+  // Filter users based on verification status
+  const filteredUsers = users.filter((user) => {
+    if (filterVerified === "all") return true
+    if (filterVerified === "verified") return user.email_verified
+    if (filterVerified === "unverified") return !user.email_verified
+    return true
+  })
+
+  // Count unverified users
+  const unverifiedCount = users.filter((user) => !user.email_verified).length
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      {/* Header with filter and add button */}
+      <div className="flex justify-between items-center gap-4">
+        <div className="flex items-center gap-4">
+          <Select value={filterVerified} onValueChange={(value: any) => setFilterVerified(value)}>
+            <SelectTrigger className="w-[200px] border-amber-200">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Users</SelectItem>
+              <SelectItem value="verified">
+                <span className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  Verified
+                </span>
+              </SelectItem>
+              <SelectItem value="unverified">
+                <span className="flex items-center gap-2">
+                  Unverified ({unverifiedCount})
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
             <Button
@@ -187,7 +246,7 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
             <DialogHeader>
               <DialogTitle className="text-amber-900">Add New User</DialogTitle>
               <DialogDescription className="text-amber-700">
-                Create a new employee account. They will receive an email to verify their account.
+                Create a new employee account. You can manually verify their email after creation.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddUser} className="space-y-4">
@@ -381,16 +440,40 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
               <TableHead className="text-amber-900">Email</TableHead>
               <TableHead className="text-amber-900">Role</TableHead>
               <TableHead className="text-amber-900">Salary (SGD)</TableHead>
+              <TableHead className="text-amber-900">Email Status</TableHead>
               <TableHead className="text-amber-900 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
+            {filteredUsers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-amber-700">
+                  No users found
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredUsers.map((user) => (
               <TableRow key={user.id} className="hover:bg-amber-50">
                 <TableCell className="font-medium text-amber-900">{user.full_name}</TableCell>
                 <TableCell className="text-amber-700">{user.email}</TableCell>
                 <TableCell className="text-amber-700 capitalize">{user.role}</TableCell>
                 <TableCell className="text-amber-700">{user.salary ? `$${user.salary.toFixed(2)}` : "-"}</TableCell>
+                <TableCell>
+                  {user.email_verified ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-300">
+                      ✓ Verified
+                    </span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleVerifyEmail(user.id)}
+                      className="text-xs h-7 border-amber-300 hover:bg-amber-50 text-amber-700"
+                    >
+                      Verify Email
+                    </Button>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     <Button
@@ -412,7 +495,8 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+            ))
+            )}
           </TableBody>
         </Table>
       </div>
