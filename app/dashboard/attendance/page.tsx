@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AttendanceMarker } from "@/components/attendance-marker"
 import { AttendanceCalendar } from "@/components/attendance-calendar"
 import { AdminAttendanceTable } from "@/components/admin-attendance-table"
+import { formatDateToString } from "@/lib/utils"
 
 export default async function AttendancePage() {
   const supabase = await createClient()
@@ -19,7 +20,7 @@ export default async function AttendancePage() {
   const { data: userData } = await supabase.from("users").select("*").eq("id", user.id).single()
 
   // Get today's attendance
-  const today = new Date().toISOString().split("T")[0]
+  const today = formatDateToString(new Date())
   const { data: todayAttendance } = await supabase
     .from("attendance")
     .select("*")
@@ -39,8 +40,8 @@ export default async function AttendancePage() {
   let monthAttendanceQuery = supabase
     .from("attendance")
     .select("*, user:users!attendance_user_id_fkey(id, full_name, email)")
-    .gte("date", firstDay.toISOString().split("T")[0])
-    .lte("date", lastDay.toISOString().split("T")[0])
+    .gte("date", formatDateToString(firstDay))
+    .lte("date", formatDateToString(lastDay))
     .order("date", { ascending: false })
 
   if (userData?.role !== "admin") {
@@ -52,8 +53,8 @@ export default async function AttendancePage() {
   let monthLeavesQuery = supabase
     .from("leaves")
     .select("*")
-    .gte("from_date", firstDay.toISOString().split("T")[0])
-    .lte("to_date", lastDay.toISOString().split("T")[0])
+    .gte("from_date", formatDateToString(firstDay))
+    .lte("to_date", formatDateToString(lastDay))
 
   if (userData?.role !== "admin") {
     monthLeavesQuery = monthLeavesQuery.eq("user_id", user.id)

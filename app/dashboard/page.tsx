@@ -5,6 +5,7 @@ import { CalendarCheck, Users, FileText, Calendar } from "lucide-react"
 import Link from "next/link"
 import { ClockPromptModal } from "@/components/clock-prompt-modal"
 import { DashboardAttendanceCalendar } from "@/components/dashboard-attendance-calendar"
+import { formatDateToString } from "@/lib/utils"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -20,7 +21,7 @@ export default async function DashboardPage() {
   const { data: userData } = await supabase.from("users").select("*").eq("id", user.id).single()
 
   // Get today's date
-  const today = new Date().toISOString().split("T")[0]
+  const today = formatDateToString(new Date())
 
   // Get today's attendance
   const { data: todayAttendance } = await supabase
@@ -42,8 +43,8 @@ export default async function DashboardPage() {
     .from("attendance")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id)
-    .gte("date", firstDay.toISOString().split("T")[0])
-    .lte("date", lastDay.toISOString().split("T")[0])
+    .gte("date", formatDateToString(firstDay))
+    .lte("date", formatDateToString(lastDay))
     .eq("status", "present")
 
   // Get attendance records with clock times to calculate total hours
@@ -51,8 +52,8 @@ export default async function DashboardPage() {
     .from("attendance")
     .select("clock_in, clock_out, date")
     .eq("user_id", user.id)
-    .gte("date", firstDay.toISOString().split("T")[0])
-    .lte("date", lastDay.toISOString().split("T")[0])
+    .gte("date", formatDateToString(firstDay))
+    .lte("date", formatDateToString(lastDay))
     .eq("status", "present")
 
   // Calculate total hours worked (excluding 1 hour lunch break per day)
@@ -78,8 +79,8 @@ export default async function DashboardPage() {
     .from("leaves")
     .select("from_date, to_date, from_session, to_session", { count: "exact" })
     .eq("user_id", user.id)
-    .gte("from_date", firstDay.toISOString().split("T")[0])
-    .lte("to_date", lastDay.toISOString().split("T")[0])
+    .gte("from_date", formatDateToString(firstDay))
+    .lte("to_date", formatDateToString(lastDay))
     .eq("status", "approved")
 
   // Calculate total leave days excluding weekends
