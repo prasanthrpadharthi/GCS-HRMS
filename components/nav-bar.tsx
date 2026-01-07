@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Menu, User, LogOut, Key, Users, CalendarCheck, FileText, Home, Calendar, Sparkles } from "lucide-react"
+import { Menu, User, LogOut, Key, Users, CalendarCheck, FileText, Home, Calendar, Sparkles, Clock } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 interface NavBarProps {
@@ -67,6 +67,7 @@ export function NavBar({ user: initialUser }: NavBarProps) {
     { href: "/dashboard/attendance", label: "Attendance", icon: CalendarCheck },
     { href: "/dashboard/leaves", label: "Leaves", icon: Calendar },
     { href: "/dashboard/holidays", label: "Holidays", icon: Sparkles },
+    { href: "/dashboard/overtime", label: "Overtime", icon: Clock },
     { href: "/dashboard/reports", label: "Reports", icon: FileText },
   ]
 

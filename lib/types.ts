@@ -85,3 +85,20 @@ export interface Holiday {
   created_at: string
   updated_at: string
 }
+
+export interface Overtime {
+  id: string
+  user_id: string
+  overtime_date: string
+  time_from?: string
+  time_to?: string
+  hours_worked: number
+  overtime_type: "weekend" | "holiday"
+  description?: string
+  status: "pending" | "approved" | "rejected"
+  approved_by?: string
+  approved_at?: string
+  created_at: string
+  updated_at: string
+  user?: User
+}
