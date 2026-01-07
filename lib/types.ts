@@ -76,3 +76,12 @@ export interface CompanySettings {
   created_at: string
   updated_at: string
 }
+
+export interface Holiday {
+  id: string
+  holiday_name: string
+  holiday_date: string
+  description?: string
+  created_at: string
+  updated_at: string
+}
