@@ -99,20 +99,30 @@ export function AdminOvertimeReports() {
     try {
       setError(null)
 
+      // Get current user ID
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error("User not authenticated")
+      }
+
       const { error: updateError } = await supabase
         .from("overtime")
         .update({
           status: "approved",
           approved_at: new Date().toISOString(),
+          approved_by: user.id,
         })
         .eq("id", id)
 
       if (updateError) throw updateError
 
+      // Show success message
+      setError(null)
       await fetchOvertimes()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to approve overtime"
       setError(errorMessage)
+      console.error("Approve overtime error:", err)
     }
   }
 
@@ -120,10 +130,17 @@ export function AdminOvertimeReports() {
     try {
       setError(null)
 
+      // Get current user ID
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error("User not authenticated")
+      }
+
       const { error: updateError } = await supabase
         .from("overtime")
         .update({
           status: "rejected",
+          approved_by: user.id,
         })
         .eq("id", id)
 
@@ -144,11 +161,35 @@ export function AdminOvertimeReports() {
     }
 
     const totalHours: { [key: string]: number } = {}
+    const overtimePay: { [key: string]: number } = {}
 
     filteredOvertimes.forEach((ot) => {
       statusCount[ot.status as keyof typeof statusCount]++
       const userName = ot.user?.full_name || "Unknown"
       totalHours[userName] = (totalHours[userName] || 0) + ot.hours_worked
+      
+      // Calculate overtime pay: 1.5x hourly rate
+      // Monthly salary / working days (excl. weekends) / 8.5 hours per day = hourly rate
+      if (ot.user?.salary && ot.status === "approved") {
+        const date = new Date(ot.overtime_date)
+        const month = date.getMonth() + 1
+        const year = date.getFullYear()
+        const daysInMonth = new Date(year, month, 0).getDate()
+        
+        // Calculate working days (excluding weekends - Saturday and Sunday)
+        let workingDaysInMonth = 0
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dayOfWeek = new Date(year, month - 1, day).getDay()
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 0 = Sunday, 6 = Saturday
+            workingDaysInMonth++
+          }
+        }
+        
+        const hourlyRate = ot.user.salary / workingDaysInMonth / 8.5
+        const overtimeHourlyRate = hourlyRate * 1.5 // 1.5x multiplier
+        const pay = overtimeHourlyRate * ot.hours_worked
+        overtimePay[userName] = (overtimePay[userName] || 0) + pay
+      }
     })
 
     return {
@@ -159,6 +200,10 @@ export function AdminOvertimeReports() {
       hoursData: Object.entries(totalHours).map(([name, hours]) => ({
         name,
         hours: parseFloat(hours.toFixed(1)),
+      })),
+      payData: Object.entries(overtimePay).map(([name, pay]) => ({
+        name,
+        pay: parseFloat(pay.toFixed(2)),
       })),
     }
   }
@@ -178,8 +223,30 @@ export function AdminOvertimeReports() {
 
   const COLORS = ["#10b981", "#f59e0b", "#ef4444"]
 
-  const { statusCount, hoursData } = getMonthChartData()
+  const { statusCount, hoursData, payData } = getMonthChartData()
   const totalHours = filteredOvertimes.reduce((sum, ot) => sum + ot.hours_worked, 0)
+  const totalOvertimePay = filteredOvertimes.reduce((sum, ot) => {
+    if (ot.user?.salary && ot.status === "approved") {
+      const date = new Date(ot.overtime_date)
+      const month = date.getMonth() + 1
+      const year = date.getFullYear()
+      const daysInMonth = new Date(year, month, 0).getDate()
+      
+      // Calculate working days (excluding weekends)
+      let workingDaysInMonth = 0
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayOfWeek = new Date(year, month - 1, day).getDay()
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          workingDaysInMonth++
+        }
+      }
+      
+      const hourlyRate = ot.user.salary / workingDaysInMonth / 8.5
+      const overtimeHourlyRate = hourlyRate * 1.5
+      return sum + (overtimeHourlyRate * ot.hours_worked)
+    }
+    return sum
+  }, 0)
   const totalRecords = filteredOvertimes.length
 
   if (loading) {
@@ -251,7 +318,7 @@ export function AdminOvertimeReports() {
       </Card>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-green-900 flex items-center gap-2">
@@ -300,6 +367,17 @@ export function AdminOvertimeReports() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-blue-700">{totalHours.toFixed(1)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-orange-900 flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              OT Pay (1.5x)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-orange-700">₹{totalOvertimePay.toFixed(2)}</p>
           </CardContent>
         </Card>
       </div>
@@ -361,6 +439,32 @@ export function AdminOvertimeReports() {
         </Card>
       </div>
 
+      {/* Overtime Payroll Chart */}
+      {payData && payData.length > 0 && (
+        <Card className="border-orange-200">
+          <CardHeader>
+            <CardTitle className="text-orange-900">Overtime Pay by Employee (1.5x Rate)</CardTitle>
+            <CardDescription>Pro-rata overtime compensation based on hourly rate</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={payData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                  <YAxis />
+                  <Tooltip 
+                    formatter={(value) => `₹${(value as number).toFixed(2)}`}
+                    contentStyle={{ backgroundColor: "#f5f3ff", border: "1px solid #ddd" }}
+                  />
+                  <Bar dataKey="pay" fill="#f97316" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Overtime Table */}
       <Card className="border-purple-200">
         <CardHeader>
@@ -392,13 +496,21 @@ export function AdminOvertimeReports() {
                     <TableHead className="text-purple-900 font-semibold">To Time</TableHead>
                     <TableHead className="text-purple-900 font-semibold">Type</TableHead>
                     <TableHead className="text-purple-900 font-semibold">Hours</TableHead>
+                    <TableHead className="text-purple-900 font-semibold">OT Pay (1.5x)</TableHead>
                     <TableHead className="text-purple-900 font-semibold">Status</TableHead>
                     <TableHead className="text-purple-900 font-semibold">Description</TableHead>
                     <TableHead className="text-purple-900 font-semibold">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOvertimes.map((ot) => (
+                  {filteredOvertimes.map((ot) => {
+                    let overtimePay = 0
+                    if (ot.user?.salary && ot.status === "approved") {
+                      const hourlyRate = ot.user.salary / 22 / 8.5
+                      const overtimeHourlyRate = hourlyRate * 1.5
+                      overtimePay = overtimeHourlyRate * ot.hours_worked
+                    }
+                    return (
                     <TableRow key={ot.id} className="border-purple-100 hover:bg-purple-50">
                       <TableCell className="font-medium text-gray-900">
                         {ot.user?.full_name || "Unknown"}
@@ -414,6 +526,9 @@ export function AdminOvertimeReports() {
                       </TableCell>
                       <TableCell className="text-gray-700 capitalize">{ot.overtime_type}</TableCell>
                       <TableCell className="text-gray-700 font-semibold">{ot.hours_worked} hrs</TableCell>
+                      <TableCell className="text-orange-700 font-semibold">
+                        {ot.status === "approved" ? `₹${overtimePay.toFixed(2)}` : "-"}
+                      </TableCell>
                       <TableCell>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${getStatusColor(
@@ -450,7 +565,8 @@ export function AdminOvertimeReports() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

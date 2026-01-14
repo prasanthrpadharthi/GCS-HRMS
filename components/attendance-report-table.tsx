@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Download } from "lucide-react"
-import type { User } from "@/lib/types"
+import type { User, Holiday } from "@/lib/types"
 import { LoadingSpinner } from "@/components/ui/loading"
 import { formatDateToString } from "@/lib/utils"
 
@@ -33,6 +33,8 @@ interface ReportData {
   effectiveDays: number
   deficitHours: number
   calculatedSalary: number
+  overtimePay: number
+  totalSalaryWithOvertime: number
 }
 
 export function AttendanceReportTable({
@@ -111,6 +113,15 @@ export function AttendanceReportTable({
       const weekendDays = settings?.weekend_days || ["Saturday", "Sunday"]
       const workingDays = calculateWorkingDays(year, month, weekendDays)
 
+      // Get holidays for the month
+      const { data: holidaysData } = await supabase
+        .from("holidays")
+        .select("*")
+        .gte("holiday_date", startDate)
+        .lte("holiday_date", endDate)
+      
+      const holidays: Holiday[] = holidaysData || []
+
       // Determine which users to fetch
       let usersToProcess: User[] = []
       if (selectedUserId === "all") {
@@ -140,6 +151,15 @@ export function AttendanceReportTable({
           .gte("from_date", startDate)
           .lte("to_date", endDate)
           .eq("status", "approved")  // Only count approved leaves
+
+        // Get overtime records
+        const { data: overtimes } = await supabase
+          .from("overtime")
+          .select("*")
+          .eq("user_id", user.id)
+          .gte("overtime_date", startDate)
+          .lte("overtime_date", endDate)
+          .eq("status", "approved")  // Only count approved overtime
 
         // Calculate metrics
         const presentDays = attendance?.filter((a) => a.status === "present").length || 0
@@ -189,6 +209,7 @@ export function AttendanceReportTable({
         
         // Calculate total hours worked (excluding 1 hour lunch break per day)
         // For paid leaves: Add 8.5 hours for full day, or remaining hours for half day
+        // For holidays: Add 8.5 hours by default
         let totalHoursWorked = 0
         let deficitHours = 0
         let paidLeaveHours = 0
@@ -257,6 +278,26 @@ export function AttendanceReportTable({
           }
         })
         
+        // Add holidays as full day present (8.5 hours) by default
+        holidays.forEach((holiday) => {
+          const holidayDate = holiday.holiday_date
+          const holidayDateObj = new Date(holidayDate)
+          const dayName = holidayDateObj.toLocaleDateString("en-US", { weekday: "long" })
+          
+          // Skip if it's already a weekend
+          if (!weekendDays.includes(dayName)) {
+            // Only count if there's no attendance record and no leave record for this date
+            const hasAttendance = attendance?.some(a => a.date === holidayDate)
+            const hasLeave = leavesByDate.has(holidayDate)
+            
+            if (!hasAttendance && !hasLeave) {
+              // Count holiday as full day present (8.5 hours) for payroll purposes
+              totalHoursWorked += 8.5
+              paidLeaveHours += 8.5
+            }
+          }
+        })
+        
         // Calculate effective days (total hours / 8.5 hours per day)
         const effectiveDays = totalHoursWorked > 0 ? totalHoursWorked / 8.5 : 0
         
@@ -321,6 +362,20 @@ export function AttendanceReportTable({
           calculatedSalary = effectiveDays * salaryPerDay
         }
 
+        // Calculate overtime pay (1.5x hourly rate)
+        let overtimePay = 0
+        if (user.salary && overtimes && overtimes.length > 0) {
+          const salaryPerDay = calculateSalaryPerDay(user.salary, workingDays)
+          const hourlyRate = salaryPerDay / 8.5
+          const overtimeHourlyRate = hourlyRate * 1.5
+          
+          overtimes.forEach((ot) => {
+            overtimePay += overtimeHourlyRate * ot.hours_worked
+          })
+        }
+
+        const totalSalaryWithOvertime = calculatedSalary + overtimePay
+
         reports.push({
           user,
           totalDays: daysInMonth,
@@ -335,6 +390,8 @@ export function AttendanceReportTable({
           effectiveDays,
           deficitHours,
           calculatedSalary,
+          overtimePay,
+          totalSalaryWithOvertime,
         })
       }
 
@@ -366,6 +423,8 @@ export function AttendanceReportTable({
       "Unpaid Leaves",
       "Monthly Salary (SGD)",
       "Calculated Salary (SGD)",
+      "Overtime Pay (SGD)",
+      "Total Salary With Overtime (SGD)",
     ]
 
     // CSV rows
@@ -384,6 +443,8 @@ export function AttendanceReportTable({
       data.unpaidLeaveDays,
       data.user.salary?.toFixed(2) || "N/A",
       data.calculatedSalary.toFixed(2),
+      data.overtimePay.toFixed(2),
+      data.totalSalaryWithOvertime.toFixed(2),
     ])
 
     // Create CSV content
@@ -482,6 +543,8 @@ export function AttendanceReportTable({
                 <TableHead className="text-amber-900 text-right">Unpaid Leaves</TableHead>
                 <TableHead className="text-amber-900 text-right">Monthly Salary</TableHead>
                 <TableHead className="text-amber-900 text-right">Calculated Salary</TableHead>
+                <TableHead className="text-amber-900 text-right">Overtime Pay (1.5x)</TableHead>
+                <TableHead className="text-amber-900 text-right">Total Salary (with OT)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -509,6 +572,12 @@ export function AttendanceReportTable({
                   </TableCell>
                   <TableCell className="text-right font-bold text-green-700">
                     ${data.calculatedSalary.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold text-orange-700">
+                    ${data.overtimePay.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold text-purple-700 text-lg">
+                    ${data.totalSalaryWithOvertime.toFixed(2)}
                   </TableCell>
                 </TableRow>
               ))}

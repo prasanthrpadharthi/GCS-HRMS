@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Clock, CheckCircle, Calendar, Plus } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import type { Attendance, CompanySettings } from "@/lib/types"
+import type { Attendance, CompanySettings, Holiday } from "@/lib/types"
 import { LeaveApplyDialog } from "@/components/leave-apply-dialog"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -29,6 +29,8 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
   const [manualDate, setManualDate] = useState("")
   const [manualClockIn, setManualClockIn] = useState("")
   const [manualClockOut, setManualClockOut] = useState("")
+  const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [loadingHolidays, setLoadingHolidays] = useState(true)
   const router = useRouter()
 
   // Generate time options in 30-minute intervals from 9:00 AM to 7:00 PM
@@ -74,6 +76,27 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
   const { minDate, maxDate } = getDateRange()
 
   useEffect(() => {
+    // Fetch holidays
+    const fetchHolidays = async () => {
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from("holidays")
+          .select("*")
+          .order("holiday_date")
+        
+        setHolidays(data || [])
+      } catch (err) {
+        console.error("Failed to fetch holidays:", err)
+      } finally {
+        setLoadingHolidays(false)
+      }
+    }
+
+    fetchHolidays()
+  }, [])
+
+  useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
@@ -101,12 +124,31 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
     return now >= allowedTime
   }
 
+  const isHoliday = (date: string): boolean => {
+    return holidays.some((h) => h.holiday_date === date)
+  }
+
+  const getHolidayName = (date: string): string | null => {
+    const holiday = holidays.find((h) => h.holiday_date === date)
+    return holiday ? holiday.holiday_name : null
+  }
+
   const handleClockIn = async () => {
+    // Check if today is a holiday
+    if (isHoliday(today)) {
+      const holidayName = getHolidayName(today)
+      await showAlert(
+        "Holiday Detected",
+        `${holidayName} is a public holiday. Attendance marking is not required. If you worked today, you can record overtime instead.`
+      )
+      return
+    }
+
     // Check if today is a weekend
     const todayDate = new Date()
     const dayName = todayDate.toLocaleDateString("en-US", { weekday: "long" })
     if (settings?.weekend_days.includes(dayName)) {
-      await showAlert("Weekend Day", "Attendance marking is not allowed on weekends.")
+      await showAlert("Weekend Day", "Attendance marking is not allowed on weekends. If you worked, you can record overtime instead.")
       return
     }
 
@@ -182,6 +224,16 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
   const handleManualAttendance = async () => {
     if (!manualDate || !manualClockIn) {
       setError("Please select date and clock in time")
+      return
+    }
+
+    // Check if selected date is a holiday
+    if (isHoliday(manualDate)) {
+      const holidayName = getHolidayName(manualDate)
+      await showAlert(
+        "Holiday Detected",
+        `${holidayName} is a public holiday. Attendance marking is not required. If you worked on this date, please record overtime instead.`
+      )
       return
     }
 
