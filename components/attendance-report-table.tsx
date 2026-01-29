@@ -5,10 +5,12 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download } from "lucide-react"
+import { Download, FileDown } from "lucide-react"
 import type { User, Holiday } from "@/lib/types"
 import { LoadingSpinner } from "@/components/ui/loading"
 import { formatDateToString } from "@/lib/utils"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 interface AttendanceReportTableProps {
   currentUserId: string
@@ -35,6 +37,21 @@ interface ReportData {
   calculatedSalary: number
   overtimePay: number
   totalSalaryWithOvertime: number
+  detailedAttendance?: DetailedAttendanceRecord[]
+}
+
+interface DetailedAttendanceRecord {
+  date: string
+  dayName: string
+  clockIn: string | null
+  clockOut: string | null
+  totalHours: number
+  status: string
+  isWeekend: boolean
+  isHoliday: boolean
+  holidayName?: string
+  isOvertime: boolean
+  overtimeHours?: number
 }
 
 export function AttendanceReportTable({
@@ -400,6 +417,77 @@ export function AttendanceReportTable({
 
         const totalSalaryWithOvertime = calculatedSalary + overtimePay
 
+        // Build detailed attendance records for PDF export
+        const detailedAttendance: DetailedAttendanceRecord[] = []
+        const attendanceMap = new Map(attendance?.map(a => [a.date, a]) || [])
+        const overtimeMap = new Map(overtimes?.map(ot => [ot.overtime_date, ot]) || [])
+
+        for (let day = 1; day <= daysInMonth; day++) {
+          const date = new Date(year, month - 1, day)
+          const dateString = formatDateToString(date)
+          const dayName = date.toLocaleDateString("en-US", { weekday: "long" })
+          const isWeekend = weekendDays.includes(dayName)
+
+          // Find holiday for this date
+          const holiday = holidays.find(h => h.holiday_date === dateString)
+          const isHoliday = !!holiday
+
+          // Find overtime for this date
+          const overtime = overtimeMap.get(dateString)
+          const isOvertime = !!overtime
+
+          // Determine status and hours
+          let clockIn = null
+          let clockOut = null
+          let totalHours = 0
+          let status = ""
+
+          if (isHoliday && holiday) {
+            status = "Holiday"
+            totalHours = 8.5
+          } else if (isWeekend) {
+            status = "Weekend"
+          } else if (overtime && isOvertime) {
+            status = "Overtime"
+            totalHours = overtime.hours_worked
+          } else {
+            const attendanceRecord = attendanceMap.get(dateString)
+            const leaveInfo = leavesByDate.get(dateString)
+
+            if (attendanceRecord && attendanceRecord.clock_in && attendanceRecord.clock_out) {
+              clockIn = attendanceRecord.clock_in
+              clockOut = attendanceRecord.clock_out
+              const clockInTime = new Date(`${dateString}T${clockIn}`)
+              const clockOutTime = new Date(`${dateString}T${clockOut}`)
+              let hoursWorked = (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60)
+
+              const isHalfDayLeave = leaveInfo && !leaveInfo.isFullDay
+              const shouldDeductLunch = hoursWorked > 5 && !isHalfDayLeave
+              totalHours = shouldDeductLunch ? Math.max(0, hoursWorked - 1) : hoursWorked
+              status = "Present"
+            } else if (leaveInfo) {
+              status = leaveInfo.isPaid ? "Paid Leave" : "Unpaid Leave"
+              totalHours = leaveInfo.isPaid ? 8.5 : 0
+            } else {
+              status = "Absent"
+            }
+          }
+
+          detailedAttendance.push({
+            date: dateString,
+            dayName,
+            clockIn,
+            clockOut,
+            totalHours,
+            status,
+            isWeekend,
+            isHoliday,
+            holidayName: holiday?.holiday_name,
+            isOvertime,
+            overtimeHours: overtime?.hours_worked,
+          })
+        }
+
         reports.push({
           user,
           totalDays: daysInMonth,
@@ -416,6 +504,7 @@ export function AttendanceReportTable({
           calculatedSalary,
           overtimePay,
           totalSalaryWithOvertime,
+          detailedAttendance,
         })
       }
 
@@ -482,6 +571,176 @@ export function AttendanceReportTable({
     link.click()
   }
 
+  const formatTime = (timeString: string | null) => {
+    if (!timeString) return "-"
+    const [hours, minutes] = timeString.split(":")
+    const hour = parseInt(hours)
+    const ampm = hour >= 12 ? "PM" : "AM"
+    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
+    return `${displayHour}:${minutes} ${ampm}`
+  }
+
+  const exportToPDF = async () => {
+    const monthName = months.find((m) => m.value === selectedMonth)?.label
+    const doc = new jsPDF("p", "mm", "a4")
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 15
+    let yPosition = margin
+
+    // Load company logo
+    try {
+      const logoResponse = await fetch("/icon.svg")
+      const logoSvg = await logoResponse.text()
+      const logoUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(logoSvg)))
+
+      // Add logo to top left
+      doc.addImage(logoUrl, "SVG", margin, yPosition, 25, 25)
+    } catch (error) {
+      console.log("Logo not found, using text only")
+    }
+
+    // Company name header
+    doc.setFontSize(18)
+    doc.setFont("helvetica", "bold")
+    doc.text("General Commercial Services", margin + 30, yPosition + 8)
+
+    // Report title
+    doc.setFontSize(14)
+    doc.setFont("helvetica", "normal")
+    doc.text(`Attendance Report - ${monthName} ${selectedYear}`, margin, yPosition + 20)
+
+    yPosition += 35
+
+    // Generate PDF for each user
+    for (const data of reportData) {
+      // Check if we need a new page
+      if (yPosition > 180) {
+        doc.addPage()
+        yPosition = margin
+      }
+
+      // Employee details section
+      doc.setDrawColor(200, 200, 200)
+      doc.setFillColor(245, 245, 245)
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 25, 2, 2, "FD")
+
+      yPosition += 8
+      doc.setFontSize(12)
+      doc.setFont("helvetica", "bold")
+      doc.text("Employee Details:", margin + 5, yPosition)
+
+      yPosition += 7
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "normal")
+      doc.text(`Name: ${data.user.full_name}`, margin + 5, yPosition)
+      doc.text(`Email: ${data.user.email}`, margin + 80, yPosition)
+
+      yPosition += 7
+      doc.text(`Role: ${data.user.role}`, margin + 5, yPosition)
+      doc.text(`Monthly Salary: ${data.user.salary ? `$${data.user.salary.toFixed(2)}` : "N/A"}`, margin + 80, yPosition)
+
+      yPosition += 12
+
+      // Summary section
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "bold")
+      doc.text(
+        `Working Days: ${data.workingDays} | Present: ${data.presentDays} | Absent: ${data.absentDays.toFixed(1)} | Leaves: ${data.leaveDays} | Total Hours: ${data.totalHoursWorked.toFixed(1)} hrs`,
+        margin,
+        yPosition
+      )
+
+      yPosition += 8
+
+      // Build table data
+      if (data.detailedAttendance && data.detailedAttendance.length > 0) {
+        const tableData = data.detailedAttendance.map((record) => [
+          record.date,
+          record.dayName,
+          formatTime(record.clockIn),
+          formatTime(record.clockOut),
+          record.totalHours > 0 ? `${record.totalHours.toFixed(2)} hrs` : "-",
+          record.status,
+        ])
+
+        // Add table using autoTable
+        autoTable(doc, {
+          startY: yPosition,
+          head: [["Date", "Day", "From Time", "To Time", "Total Hours", "Status"]],
+          body: tableData,
+          theme: "grid",
+          styles: {
+            fontSize: 8,
+            cellPadding: 2,
+            font: "helvetica",
+          },
+          headStyles: {
+            fillColor: [245, 158, 11],
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+            halign: "center",
+          },
+          columnStyles: {
+            0: { cellWidth: 25 }, // Date
+            1: { cellWidth: 25 }, // Day
+            2: { cellWidth: 30 }, // From Time
+            3: { cellWidth: 30 }, // To Time
+            4: { cellWidth: 35 }, // Total Hours
+            5: { cellWidth: 35 }, // Status
+          },
+          didParseCell: function (data) {
+            // Color code status cells
+            if (data.section === "body" && data.column.index === 5) {
+              const status = data.cell.raw as string
+              if (status === "Present" || status === "Holiday") {
+                data.cell.styles.textColor = [34, 197, 94] // green
+                data.cell.styles.fontStyle = "bold"
+              } else if (status === "Absent") {
+                data.cell.styles.textColor = [239, 68, 68] // red
+                data.cell.styles.fontStyle = "bold"
+              } else if (status === "Paid Leave") {
+                data.cell.styles.textColor = [59, 130, 246] // blue
+              } else if (status === "Unpaid Leave") {
+                data.cell.styles.textColor = [249, 115, 22] // orange
+              } else if (status === "Weekend") {
+                data.cell.styles.textColor = [107, 114, 128] // gray
+              } else if (status === "Overtime") {
+                data.cell.styles.textColor = [168, 85, 247] // purple
+                data.cell.styles.fontStyle = "bold"
+              }
+            }
+          },
+          // Add page footer
+          didDrawPage: function () {
+            doc.setFontSize(8)
+            doc.setTextColor(150)
+            doc.text(
+              `Generated by GCS HRMS - ${new Date().toLocaleString()}`,
+              pageWidth / 2,
+              pageHeight - 5,
+              { align: "center" }
+            )
+          },
+        })
+
+        yPosition = (doc as any).lastAutoTable.finalY + 15
+      } else {
+        yPosition += 5
+      }
+
+      // Add page break between users (except last user)
+      if (data !== reportData[reportData.length - 1]) {
+        doc.addPage()
+        yPosition = margin
+      }
+    }
+
+    // Save PDF
+    const filename = `attendance_report_${monthName}_${selectedYear}.pdf`
+    doc.save(filename)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4 items-end">
@@ -543,6 +802,15 @@ export function AttendanceReportTable({
         >
           <Download className="mr-2 h-4 w-4" />
           Export CSV
+        </Button>
+
+        <Button
+          onClick={exportToPDF}
+          disabled={isLoading || reportData.length === 0}
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+        >
+          <FileDown className="mr-2 h-4 w-4" />
+          Download PDF
         </Button>
       </div>
 
