@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import type { Attendance, Leave } from "@/lib/types"
+import type { Attendance, Leave, Holiday } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -25,6 +25,7 @@ export function DashboardAttendanceCalendar({
   const [selectedYear, setSelectedYear] = useState(initialYear)
   const [attendance, setAttendance] = useState<Attendance[]>([])
   const [leaves, setLeaves] = useState<Leave[]>([])
+  const [holidays, setHolidays] = useState<Holiday[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [settings, setSettings] = useState<any>(null)
   const [allUsersAttendance, setAllUsersAttendance] = useState<Attendance[]>([])
@@ -88,6 +89,15 @@ export function DashboardAttendanceCalendar({
         .single()
       
       setSettings(settingsData)
+      
+      // Fetch holidays for the month
+      const { data: holidaysData } = await supabase
+        .from("holidays")
+        .select("*")
+        .gte("holiday_date", formatDateToString(firstDay))
+        .lte("holiday_date", formatDateToString(lastDay))
+      
+      setHolidays(holidaysData || [])
     } catch (error) {
       console.error("Error fetching data:", error)
     } finally {
@@ -158,6 +168,12 @@ export function DashboardAttendanceCalendar({
     // Check if it's a weekend
     if (isWeekend(date)) {
       return { status: "weekend", color: "bg-gray-200 text-gray-500", hours: null }
+    }
+    
+    // Check if it's a holiday - holidays should be treated as Leave, not Absent
+    const isHoliday = holidays.some(h => h.holiday_date === dateString)
+    if (isHoliday) {
+      return { status: "holiday", color: "bg-purple-200 text-purple-800 border-purple-400", hours: null, clockIn: null, clockOut: null }
     }
     
     if (isAdmin) {
@@ -402,6 +418,10 @@ export function DashboardAttendanceCalendar({
                   <span className="text-amber-900">On Leave</span>
                 </div>
                 <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-purple-200 border-2 border-purple-400 rounded"></div>
+                  <span className="text-amber-900">Holiday</span>
+                </div>
+                <div className="flex items-center gap-1">
                   <div className="w-4 h-4 bg-gray-200 border-2 border-gray-300 rounded"></div>
                   <span className="text-amber-900">Weekend</span>
                 </div>
@@ -419,6 +439,10 @@ export function DashboardAttendanceCalendar({
                 <div className="flex items-center gap-1">
                   <div className="w-4 h-4 bg-blue-200 border-2 border-blue-400 rounded"></div>
                   <span className="text-amber-900">Leave</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-purple-200 border-2 border-purple-400 rounded"></div>
+                  <span className="text-amber-900">Holiday</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>

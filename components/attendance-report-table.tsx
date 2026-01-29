@@ -164,6 +164,30 @@ export function AttendanceReportTable({
         // Calculate metrics
         const presentDays = attendance?.filter((a) => a.status === "present").length || 0
         
+        // Count holidays as present days (excluding those that fall on weekends)
+        let holidayCount = 0
+        holidays.forEach((holiday) => {
+          const holidayDate = holiday.holiday_date
+          const holidayDateObj = new Date(holidayDate)
+          const dayName = holidayDateObj.toLocaleDateString("en-US", { weekday: "long" })
+          
+          // Only count holidays that are not on weekends
+          if (!weekendDays.includes(dayName)) {
+            // Only count if there's no attendance record and no leave record for this date
+            const hasAttendance = attendance?.some(a => a.date === holidayDate)
+            const hasLeave = leaves?.some(l => {
+              const fromDate = new Date(l.from_date)
+              const toDate = new Date(l.to_date)
+              const currentDate = new Date(holidayDate)
+              return currentDate >= fromDate && currentDate <= toDate
+            })
+            
+            if (!hasAttendance && !hasLeave) {
+              holidayCount++
+            }
+          }
+        })
+        
         // Build a map of leaves by date for easy lookup
         const leavesByDate = new Map<string, { isPaid: boolean, isFullDay: boolean, session: string }>()
         
@@ -349,7 +373,7 @@ export function AttendanceReportTable({
           }
         })
 
-        const absentDays = Math.max(0, workingDays - presentDays - totalLeaveDays)
+        const absentDays = Math.max(0, workingDays - presentDays - totalLeaveDays - holidayCount)
 
         // Calculate salary based on effective hours worked (Singapore MOM compliant)
         let calculatedSalary = 0
@@ -380,7 +404,7 @@ export function AttendanceReportTable({
           user,
           totalDays: daysInMonth,
           workingDays,
-          presentDays,
+          presentDays: presentDays + holidayCount, // Add holidays to present days
           absentDays,
           leaveDays: totalLeaveDays,
           paidLeaveDays,
@@ -589,8 +613,8 @@ export function AttendanceReportTable({
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
         <p className="font-semibold mb-2">Singapore MOM Salary Calculation (Hours-Based with Paid Leave):</p>
         <ul className="list-disc list-inside space-y-1">
-          <li>Expected Hours: 8.5 hours per day (9:30 AM - 7:00 PM with 1 hour lunch break)</li>
-          <li>Total Hours Worked: Sum of all daily hours (Clock Out - Clock In - 1 hour lunch if hours &gt; 5)</li>
+          <li><strong>Expected Hours:</strong> 8.5 hours per day (9:30 AM - 7:00 PM with 1 hour lunch break)</li>
+          <li><strong>Total Hours Worked:</strong> Sum of all daily hours (Clock Out - Clock In - 1 hour lunch if hours &gt; 5)</li>
           <li><strong>Paid Leave Logic:</strong>
             <ul className="list-disc list-inside ml-6 mt-1">
               <li>Full Day Paid Leave: Adds 8.5 hours to total hours worked</li>
@@ -598,12 +622,53 @@ export function AttendanceReportTable({
               <li>Example: If employee works 4 hours and takes half-day paid leave, system adds 4.5 hours (8.5 - 4 = 4.5)</li>
             </ul>
           </li>
-          <li>Deficit Hours: Total hours short of expected hours (only counting shortfalls on non-leave days)</li>
-          <li>Effective Days = Total Hours Worked (including paid leave adjustments) ÷ 8.5 hours</li>
-          <li>Daily Rate = Monthly Salary ÷ Number of Working Days in Month</li>
-          <li>Calculated Salary = Effective Days × Daily Rate</li>
-          <li>Unpaid leaves reduce the effective days in the calculation</li>
-          <li>Weekends (Saturday & Sunday) are excluded from working days calculation</li>
+          <li><strong>Holiday Handling:</strong>
+            <ul className="list-disc list-inside ml-6 mt-1">
+              <li>Public holidays are automatically counted as present days</li>
+              <li>Each holiday adds 8.5 hours to total hours worked (counted as full day paid)</li>
+              <li>Holidays are excluded from absent days calculation</li>
+              <li>If an employee works on a holiday, the actual hours worked are counted instead</li>
+              <li>Holidays falling on weekends are not counted as they're already non-working days</li>
+            </ul>
+          </li>
+          <li><strong>Deficit Hours:</strong> Total hours short of expected hours (only counting shortfalls on non-leave days and non-holidays)</li>
+          <li><strong>Effective Days Calculation:</strong>
+            <ul className="list-disc list-inside ml-6 mt-1">
+              <li>Formula: Effective Days = Total Hours Worked (including paid leave and holidays) ÷ 8.5 hours</li>
+              <li>Example: If total hours = 187 hours, then Effective Days = 187 ÷ 8.5 = 22 days</li>
+              <li>This ensures employees are fairly compensated for partial days worked</li>
+            </ul>
+          </li>
+          <li><strong>Daily Rate Calculation:</strong>
+            <ul className="list-disc list-inside ml-6 mt-1">
+              <li>Formula: Daily Rate = Monthly Salary ÷ Number of Working Days in Month</li>
+              <li>Working days exclude weekends (Saturday & Sunday by default)</li>
+              <li>Example: If monthly salary is $3,000 and working days = 22, then Daily Rate = $136.36</li>
+            </ul>
+          </li>
+          <li><strong>Final Salary Calculation:</strong>
+            <ul className="list-disc list-inside ml-6 mt-1">
+              <li>Formula: Calculated Salary = Effective Days × Daily Rate</li>
+              <li>This ensures pro-rated salary based on actual work performed</li>
+              <li>Unpaid leaves reduce the effective days in the calculation</li>
+              <li>Example: If Effective Days = 22 and Daily Rate = $136.36, then Salary = $3,000</li>
+            </ul>
+          </li>
+          <li><strong>Overtime Pay:</strong>
+            <ul className="list-disc list-inside ml-6 mt-1">
+              <li>Calculated at 1.5× the hourly rate (as per Singapore MOM guidelines)</li>
+              <li>Hourly Rate = Daily Rate ÷ 8.5 hours</li>
+              <li>Only approved overtime hours are included</li>
+            </ul>
+          </li>
+          <li><strong>Important Notes:</strong>
+            <ul className="list-disc list-inside ml-6 mt-1">
+              <li>All calculations follow Singapore Ministry of Manpower (MOM) guidelines</li>
+              <li>Weekends are excluded from working days calculation</li>
+              <li>Lunch breaks (1 hour) are automatically deducted if work hours exceed 5 hours</li>
+              <li>Present Days count includes actual attendance + holidays (not on weekends)</li>
+            </ul>
+          </li>
         </ul>
       </div>
     </div>
