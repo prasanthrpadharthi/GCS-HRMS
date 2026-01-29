@@ -584,18 +584,18 @@ export function AttendanceReportTable({
     const monthName = months.find((m) => m.value === selectedMonth)?.label
     const doc = new jsPDF("p", "mm", "a4")
     const pageWidth = doc.internal.pageSize.getWidth()
-    const pageHeight = doc.internal.pageSize.getHeight()
     const margin = 15
     let yPosition = margin
 
-    // Load company logo
+    // Load company logo (PNG)
     try {
-      const logoResponse = await fetch("/icon.svg")
-      const logoSvg = await logoResponse.text()
-      const logoUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(logoSvg)))
+      const logoResponse = await fetch("/images/icon-512.jpg")
+      const logoBlob = await logoResponse.blob()
+      const logoUrl = URL.createObjectURL(logoBlob)
 
       // Add logo to top left
-      doc.addImage(logoUrl, "SVG", margin, yPosition, 25, 25)
+      doc.addImage(logoUrl, "JPEG", margin, yPosition, 25, 25)
+      URL.revokeObjectURL(logoUrl)
     } catch (error) {
       console.log("Logo not found, using text only")
     }
@@ -603,11 +603,13 @@ export function AttendanceReportTable({
     // Company name header
     doc.setFontSize(18)
     doc.setFont("helvetica", "bold")
+    doc.setTextColor(37, 99, 235) // Blue color
     doc.text("General Commercial Services", margin + 30, yPosition + 8)
 
     // Report title
     doc.setFontSize(14)
     doc.setFont("helvetica", "normal")
+    doc.setTextColor(0, 0, 0)
     doc.text(`Attendance Report - ${monthName} ${selectedYear}`, margin, yPosition + 20)
 
     yPosition += 35
@@ -615,7 +617,7 @@ export function AttendanceReportTable({
     // Generate PDF for each user
     for (const data of reportData) {
       // Check if we need a new page
-      if (yPosition > 180) {
+      if (yPosition > 170) {
         doc.addPage()
         yPosition = margin
       }
@@ -623,11 +625,13 @@ export function AttendanceReportTable({
       // Employee details section
       doc.setDrawColor(200, 200, 200)
       doc.setFillColor(245, 245, 245)
-      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 25, 2, 2, "FD")
+      const detailsBoxHeight = isAdmin ? 25 : 18
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, detailsBoxHeight, 2, 2, "FD")
 
       yPosition += 8
       doc.setFontSize(12)
       doc.setFont("helvetica", "bold")
+      doc.setTextColor(0, 0, 0)
       doc.text("Employee Details:", margin + 5, yPosition)
 
       yPosition += 7
@@ -638,20 +642,14 @@ export function AttendanceReportTable({
 
       yPosition += 7
       doc.text(`Role: ${data.user.role}`, margin + 5, yPosition)
-      doc.text(`Monthly Salary: ${data.user.salary ? `$${data.user.salary.toFixed(2)}` : "N/A"}`, margin + 80, yPosition)
 
-      yPosition += 12
+      // Only show salary for admin users
+      if (isAdmin) {
+        doc.text(`Monthly Salary: $${data.user.salary?.toFixed(2) || "N/A"}`, margin + 80, yPosition)
+        yPosition += 5
+      }
 
-      // Summary section
-      doc.setFontSize(10)
-      doc.setFont("helvetica", "bold")
-      doc.text(
-        `Working Days: ${data.workingDays} | Present: ${data.presentDays} | Absent: ${data.absentDays.toFixed(1)} | Leaves: ${data.leaveDays} | Total Hours: ${data.totalHoursWorked.toFixed(1)} hrs`,
-        margin,
-        yPosition
-      )
-
-      yPosition += 8
+      yPosition += 5
 
       // Build table data
       if (data.detailedAttendance && data.detailedAttendance.length > 0) {
@@ -676,7 +674,7 @@ export function AttendanceReportTable({
             font: "helvetica",
           },
           headStyles: {
-            fillColor: [245, 158, 11],
+            fillColor: [37, 99, 235], // Blue color
             textColor: [255, 255, 255],
             fontStyle: "bold",
             halign: "center",
@@ -689,42 +687,118 @@ export function AttendanceReportTable({
             4: { cellWidth: 35 }, // Total Hours
             5: { cellWidth: 35 }, // Status
           },
-          didParseCell: function (data) {
+          didParseCell: function (tableData) {
             // Color code status cells
-            if (data.section === "body" && data.column.index === 5) {
-              const status = data.cell.raw as string
+            if (tableData.section === "body" && tableData.column.index === 5) {
+              const status = tableData.cell.raw as string
               if (status === "Present" || status === "Holiday") {
-                data.cell.styles.textColor = [34, 197, 94] // green
-                data.cell.styles.fontStyle = "bold"
+                tableData.cell.styles.textColor = [34, 197, 94] // green
+                tableData.cell.styles.fontStyle = "bold"
               } else if (status === "Absent") {
-                data.cell.styles.textColor = [239, 68, 68] // red
-                data.cell.styles.fontStyle = "bold"
+                tableData.cell.styles.textColor = [239, 68, 68] // red
+                tableData.cell.styles.fontStyle = "bold"
               } else if (status === "Paid Leave") {
-                data.cell.styles.textColor = [59, 130, 246] // blue
+                tableData.cell.styles.textColor = [59, 130, 246] // blue
               } else if (status === "Unpaid Leave") {
-                data.cell.styles.textColor = [249, 115, 22] // orange
+                tableData.cell.styles.textColor = [249, 115, 22] // orange
               } else if (status === "Weekend") {
-                data.cell.styles.textColor = [107, 114, 128] // gray
+                tableData.cell.styles.textColor = [107, 114, 128] // gray
               } else if (status === "Overtime") {
-                data.cell.styles.textColor = [168, 85, 247] // purple
-                data.cell.styles.fontStyle = "bold"
+                tableData.cell.styles.textColor = [168, 85, 247] // purple
+                tableData.cell.styles.fontStyle = "bold"
               }
             }
           },
-          // Add page footer
-          didDrawPage: function () {
-            doc.setFontSize(8)
-            doc.setTextColor(150)
-            doc.text(
-              `Generated by GCS HRMS - ${new Date().toLocaleString()}`,
-              pageWidth / 2,
-              pageHeight - 5,
-              { align: "center" }
-            )
-          },
         })
 
-        yPosition = (doc as any).lastAutoTable.finalY + 15
+        yPosition = (doc as any).lastAutoTable.finalY + 10
+
+        // Check if we need a new page for summary
+        if (yPosition > 190) {
+          doc.addPage()
+          yPosition = margin
+        }
+
+        // Summary section at the bottom - increased height for better spacing
+        const summaryHeight = isAdmin ? 75 : 65
+        doc.setDrawColor(37, 99, 235) // Blue border
+        doc.setFillColor(249, 250, 251) // Light gray background
+        doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, summaryHeight, 2, 2, "FD")
+
+        yPosition += 8
+        doc.setFontSize(12)
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(37, 99, 235)
+        doc.text("Monthly Summary", margin + 5, yPosition)
+
+        yPosition += 10
+        doc.setFontSize(9)
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(0, 0, 0)
+
+        // Left column summary
+        const leftColX = margin + 5
+        const rightColX = isAdmin ? margin + 95 : margin + 85
+
+        doc.setFont("helvetica", "bold")
+        doc.text("Attendance Details:", leftColX, yPosition)
+        doc.setFont("helvetica", "normal")
+        yPosition += 6
+        doc.text(`• Total Working Days: ${data.workingDays}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`• Present Days: ${data.presentDays}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`• Absent Days: ${data.absentDays.toFixed(1)}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`• Leave Days: ${data.leaveDays}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`  - Paid Leave: ${data.paidLeaveDays}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`  - Unpaid Leave: ${data.unpaidLeaveDays}`, leftColX, yPosition)
+
+        // Right column summary
+        let rightColY = yPosition - 25
+        doc.setFont("helvetica", "bold")
+        doc.text("Hours & Details:", rightColX, rightColY)
+        doc.setFont("helvetica", "normal")
+        rightColY += 6
+        doc.text(`• Total Hours Worked: ${data.totalHoursWorked.toFixed(2)} hrs`, rightColX, rightColY)
+        rightColY += 5
+        doc.text(`• Deficit Hours: ${data.deficitHours.toFixed(2)} hrs`, rightColX, rightColY)
+        rightColY += 5
+        const absentFromDeficit = data.deficitHours / 8.5
+        doc.text(`• Absent from Deficit: ${absentFromDeficit.toFixed(2)} days`, rightColX, rightColY)
+        rightColY += 5
+        doc.text(`• Effective Days: ${data.effectiveDays.toFixed(2)}`, rightColX, rightColY)
+
+        // Only show salary details for admin users
+        if (isAdmin) {
+          rightColY += 5
+          doc.text(`• Calculated Salary: $${data.calculatedSalary.toFixed(2)}`, rightColX, rightColY)
+          rightColY += 5
+          doc.text(`• Overtime Pay: $${data.overtimePay.toFixed(2)}`, rightColX, rightColY)
+          rightColY += 5
+          doc.setFont("helvetica", "bold")
+          doc.setTextColor(34, 197, 94) // Green
+          doc.setFontSize(10)
+          doc.text(`Total Salary: $${data.totalSalaryWithOvertime.toFixed(2)}`, rightColX, rightColY)
+          yPosition += 5
+        }
+
+        yPosition += isAdmin ? 60 : 50
+
+        // Add note about MOM calculation
+        doc.setFontSize(7)
+        doc.setFont("helvetica", "italic")
+        doc.setTextColor(100, 100, 100)
+        doc.text(
+          "* Deficit hours converted to absent days based on Singapore MOM standard of 8.5 hours per working day",
+          margin,
+          yPosition,
+          { maxWidth: pageWidth - 2 * margin }
+        )
+
+        yPosition += 10
       } else {
         yPosition += 5
       }
@@ -736,9 +810,229 @@ export function AttendanceReportTable({
       }
     }
 
-    // Save PDF
-    const filename = `attendance_report_${monthName}_${selectedYear}.pdf`
+    // Save PDF with user name in filename
+    let filename = ""
+    if (reportData.length === 1) {
+      // Single user - include their name
+      const userName = reportData[0].user.full_name.replace(/\s+/g, "_").toLowerCase()
+      filename = `Attendance_report_${userName}_${monthName}_${selectedYear}.pdf`
+    } else {
+      // Multiple users - use all_employees
+      filename = `attendance_report_all_employees_${monthName}_${selectedYear}.pdf`
+    }
     doc.save(filename)
+  }
+
+  const exportIndividualPDFs = async () => {
+    const monthName = months.find((m) => m.value === selectedMonth)?.label
+
+    // Generate individual PDF for each user
+    for (const data of reportData) {
+      const doc = new jsPDF("p", "mm", "a4")
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const margin = 15
+      let yPosition = margin
+
+      // Load company logo (JPEG)
+      try {
+        const logoResponse = await fetch("/images/icon-512.jpg")
+        const logoBlob = await logoResponse.blob()
+        const logoUrl = URL.createObjectURL(logoBlob)
+
+        // Add logo to top left
+        doc.addImage(logoUrl, "JPEG", margin, yPosition, 25, 25)
+        URL.revokeObjectURL(logoUrl)
+      } catch (error) {
+        console.log("Logo not found, using text only")
+      }
+
+      // Company name header
+      doc.setFontSize(18)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(37, 99, 235) // Blue color
+      doc.text("General Commercial Services", margin + 30, yPosition + 8)
+
+      // Report title
+      doc.setFontSize(14)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(0, 0, 0)
+      doc.text(`Attendance Report - ${monthName} ${selectedYear}`, margin + 40, yPosition + 20)
+
+      yPosition += 35
+
+      // Employee details section
+      doc.setDrawColor(200, 200, 200)
+      doc.setFillColor(245, 245, 245)
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 25, 2, 2, "FD")
+
+      yPosition += 8
+      doc.setFontSize(12)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(0, 0, 0)
+      doc.text("Employee Details:", margin + 5, yPosition)
+
+      yPosition += 7
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "normal")
+      doc.text(`Name: ${data.user.full_name}`, margin + 5, yPosition)
+      doc.text(`Email: ${data.user.email}`, margin + 80, yPosition)
+
+      yPosition += 7
+      doc.text(`Role: ${data.user.role}`, margin + 5, yPosition)
+      doc.text(`Monthly Salary: $${data.user.salary?.toFixed(2) || "N/A"}`, margin + 80, yPosition)
+
+      yPosition += 10
+
+      // Build table data
+      if (data.detailedAttendance && data.detailedAttendance.length > 0) {
+        const tableData = data.detailedAttendance.map((record) => [
+          record.date,
+          record.dayName,
+          formatTime(record.clockIn),
+          formatTime(record.clockOut),
+          record.totalHours > 0 ? `${record.totalHours.toFixed(2)} hrs` : "-",
+          record.status,
+        ])
+
+        // Add table using autoTable
+        autoTable(doc, {
+          startY: yPosition,
+          head: [["Date", "Day", "From Time", "To Time", "Total Hours", "Status"]],
+          body: tableData,
+          theme: "grid",
+          styles: {
+            fontSize: 8,
+            cellPadding: 2,
+            font: "helvetica",
+          },
+          headStyles: {
+            fillColor: [37, 99, 235], // Blue color
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+            halign: "center",
+          },
+          columnStyles: {
+            0: { cellWidth: 25 }, // Date
+            1: { cellWidth: 25 }, // Day
+            2: { cellWidth: 30 }, // From Time
+            3: { cellWidth: 30 }, // To Time
+            4: { cellWidth: 35 }, // Total Hours
+            5: { cellWidth: 35 }, // Status
+          },
+          didParseCell: function (tableData) {
+            // Color code status cells
+            if (tableData.section === "body" && tableData.column.index === 5) {
+              const status = tableData.cell.raw as string
+              if (status === "Present" || status === "Holiday") {
+                tableData.cell.styles.textColor = [34, 197, 94] // green
+                tableData.cell.styles.fontStyle = "bold"
+              } else if (status === "Absent") {
+                tableData.cell.styles.textColor = [239, 68, 68] // red
+                tableData.cell.styles.fontStyle = "bold"
+              } else if (status === "Paid Leave") {
+                tableData.cell.styles.textColor = [59, 130, 246] // blue
+              } else if (status === "Unpaid Leave") {
+                tableData.cell.styles.textColor = [249, 115, 22] // orange
+              } else if (status === "Weekend") {
+                tableData.cell.styles.textColor = [107, 114, 128] // gray
+              } else if (status === "Overtime") {
+                tableData.cell.styles.textColor = [168, 85, 247] // purple
+                tableData.cell.styles.fontStyle = "bold"
+              }
+            }
+          },
+        })
+
+        yPosition = (doc as any).lastAutoTable.finalY + 10
+
+        // Check if we need a new page for summary
+        if (yPosition > 190) {
+          doc.addPage()
+          yPosition = margin
+        }
+
+        // Summary section at the bottom
+        doc.setDrawColor(37, 99, 235) // Blue border
+        doc.setFillColor(249, 250, 251) // Light gray background
+        doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 55, 2, 2, "FD")
+
+        yPosition += 8
+        doc.setFontSize(12)
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(37, 99, 235)
+        doc.text("Monthly Summary", margin + 5, yPosition)
+
+        yPosition += 10
+        doc.setFontSize(9)
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(0, 0, 0)
+
+        // Left column summary
+        const leftColX = margin + 5
+        const rightColX = margin + 95
+
+        doc.setFont("helvetica", "bold")
+        doc.text("Attendance Details:", leftColX, yPosition)
+        doc.setFont("helvetica", "normal")
+        yPosition += 6
+        doc.text(`• Total Working Days: ${data.workingDays}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`• Present Days: ${data.presentDays}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`• Absent Days: ${data.absentDays.toFixed(1)}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`• Leave Days: ${data.leaveDays}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`  - Paid Leave: ${data.paidLeaveDays}`, leftColX, yPosition)
+        yPosition += 5
+        doc.text(`  - Unpaid Leave: ${data.unpaidLeaveDays}`, leftColX, yPosition)
+
+        // Right column summary
+        let rightColY = yPosition - 25
+        doc.setFont("helvetica", "bold")
+        doc.text("Hours & Salary:", rightColX, rightColY)
+        doc.setFont("helvetica", "normal")
+        rightColY += 6
+        doc.text(`• Total Hours Worked: ${data.totalHoursWorked.toFixed(2)} hrs`, rightColX, rightColY)
+        rightColY += 5
+        doc.text(`• Deficit Hours: ${data.deficitHours.toFixed(2)} hrs`, rightColX, rightColY)
+        rightColY += 5
+        const absentFromDeficit = data.deficitHours / 8.5
+        doc.text(`• Absent from Deficit: ${absentFromDeficit.toFixed(2)} days`, rightColX, rightColY)
+        rightColY += 5
+        doc.text(`• Effective Days: ${data.effectiveDays.toFixed(2)}`, rightColX, rightColY)
+        rightColY += 5
+        doc.text(`• Calculated Salary: $${data.calculatedSalary.toFixed(2)}`, rightColX, rightColY)
+        rightColY += 5
+        doc.text(`• Overtime Pay: $${data.overtimePay.toFixed(2)}`, rightColX, rightColY)
+        rightColY += 5
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(34, 197, 94) // Green
+        doc.setFontSize(10)
+        doc.text(`Total Salary: $${data.totalSalaryWithOvertime.toFixed(2)}`, rightColX, rightColY)
+
+        yPosition += 60
+
+        // Add note about MOM calculation
+        doc.setFontSize(7)
+        doc.setFont("helvetica", "italic")
+        doc.setTextColor(100, 100, 100)
+        doc.text(
+          "* Deficit hours converted to absent days based on Singapore MOM standard of 8.5 hours per working day",
+          margin,
+          yPosition,
+          { maxWidth: pageWidth - 2 * margin }
+        )
+      }
+
+      // Save individual PDF
+      const userName = data.user.full_name.replace(/\s+/g, "_").toLowerCase()
+      const filename = `attendance_report_${userName}_${monthName}_${selectedYear}.pdf`
+      doc.save(filename)
+
+      // Small delay between downloads to avoid browser blocking
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
   }
 
   return (
@@ -812,6 +1106,17 @@ export function AttendanceReportTable({
           <FileDown className="mr-2 h-4 w-4" />
           Download PDF
         </Button>
+
+        {isAdmin && reportData.length > 1 && (
+          <Button
+            onClick={exportIndividualPDFs}
+            disabled={isLoading || reportData.length === 0}
+            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+          >
+            <FileDown className="mr-2 h-4 w-4" />
+            Download Individual PDFs
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
