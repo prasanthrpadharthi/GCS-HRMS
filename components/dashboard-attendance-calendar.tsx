@@ -52,12 +52,13 @@ export function DashboardAttendanceCalendar({
           .gte("date", formatDateToString(firstDay))
           .lte("date", formatDateToString(lastDay))
         
+        // Fetch leaves that overlap with this month (including leaves that started before or end after)
         const { data: leavesData } = await supabase
           .from("leaves")
           .select("*, user:users!leaves_user_id_fkey(id, full_name, email), leave_type:leave_types(*)")
           .eq("status", "approved")
-          .gte("from_date", formatDateToString(firstDay))
-          .lte("to_date", formatDateToString(lastDay))
+          .lte("from_date", formatDateToString(lastDay))
+          .gte("to_date", formatDateToString(firstDay))
         
         setAllUsersAttendance(attendanceData || [])
         setAllUsersLeaves(leavesData || [])
@@ -182,10 +183,16 @@ export function DashboardAttendanceCalendar({
         a.date === dateString && a.clock_in
       ).length
       
+      // Count users on leave for this specific date (excluding weekends already handled above)
       const onLeaveCount = allUsersLeaves.filter(l => {
         const fromDate = new Date(l.from_date)
         const toDate = new Date(l.to_date)
-        return date >= fromDate && date <= toDate
+        // Reset time to compare dates only
+        fromDate.setHours(0, 0, 0, 0)
+        toDate.setHours(0, 0, 0, 0)
+        const currentDate = new Date(date)
+        currentDate.setHours(0, 0, 0, 0)
+        return currentDate >= fromDate && currentDate <= toDate
       }).length
       
       // Check if date is in the future
