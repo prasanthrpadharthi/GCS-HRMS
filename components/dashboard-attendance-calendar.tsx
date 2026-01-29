@@ -195,25 +195,50 @@ export function DashboardAttendanceCalendar({
         return currentDate >= fromDate && currentDate <= toDate
       }).length
       
+      // Absent(LOP): users who have no attendance and are not on leave for this date
+      // Assume allUsersAttendance and allUsersLeaves have user info
+      const allUserIds = Array.from(new Set([
+        ...allUsersAttendance.map(a => a.user?.id),
+        ...allUsersLeaves.map(l => l.user?.id)
+      ].filter(Boolean)))
+      // If you have a separate allUsers list, use that instead for allUserIds
+
+      // Find all users who are in the system for this month (if you have allUsers, use that)
+      // For now, we use allUserIds as the set of users to check
+      const absentLOPCount = allUserIds.filter(userId => {
+        const hasAttendance = allUsersAttendance.some(a => a.user?.id === userId && a.date === dateString && a.clock_in)
+        const hasLeave = allUsersLeaves.some(l => l.user?.id === userId && (() => {
+          const fromDate = new Date(l.from_date)
+          const toDate = new Date(l.to_date)
+          fromDate.setHours(0, 0, 0, 0)
+          toDate.setHours(0, 0, 0, 0)
+          const currentDate = new Date(date)
+          currentDate.setHours(0, 0, 0, 0)
+          return currentDate >= fromDate && currentDate <= toDate
+        })())
+        return !hasAttendance && !hasLeave
+      }).length
+
       // Check if date is in the future
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       date.setHours(0, 0, 0, 0)
       
       if (date > today) {
-        return { status: "future", color: "bg-white text-gray-400", inOffice: 0, onLeave: 0 }
+        return { status: "future", color: "bg-white text-gray-400", inOffice: 0, onLeave: 0, absentLOP: 0 }
       }
       
-      if (inOfficeCount > 0 || onLeaveCount > 0) {
+      if (inOfficeCount > 0 || onLeaveCount > 0 || absentLOPCount > 0) {
         return { 
           status: "admin-view", 
           color: "bg-amber-50 text-amber-900 border-amber-300", 
           inOffice: inOfficeCount,
-          onLeave: onLeaveCount
+          onLeave: onLeaveCount,
+          absentLOP: absentLOPCount
         }
       }
       
-      return { status: "admin-view", color: "bg-gray-50 text-gray-600", inOffice: 0, onLeave: 0 }
+      return { status: "admin-view", color: "bg-gray-50 text-gray-600", inOffice: 0, onLeave: 0, absentLOP: 0 }
     }
     
     // Regular user view
@@ -316,14 +341,14 @@ export function DashboardAttendanceCalendar({
       
       if (isAdmin) {
         // Admin view: show count of in-office and on-leave users
-        const { status, color, inOffice, onLeave } = dateStatus as any
+        const { status, color, inOffice, onLeave, absentLOP } = dateStatus as any
         days.push(
           <div
             key={day}
             className={`aspect-square p-1 border-2 ${color} rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all hover:shadow-md`}
           >
             <span className="text-xs sm:text-sm font-bold">{day}</span>
-            {(inOffice > 0 || onLeave > 0) && (
+            {(inOffice > 0 || onLeave > 0 || absentLOP > 0) && (
               <>
                 {inOffice > 0 && (
                   <span className="text-[10px] font-semibold text-green-700">
@@ -333,6 +358,11 @@ export function DashboardAttendanceCalendar({
                 {onLeave > 0 && (
                   <span className="text-[10px] font-semibold text-blue-700">
                     ◐ {onLeave}
+                  </span>
+                )}
+                {absentLOP > 0 && (
+                  <span className="text-[10px] font-semibold text-red-700">
+                    ⊗ {absentLOP}
                   </span>
                 )}
               </>
@@ -423,6 +453,10 @@ export function DashboardAttendanceCalendar({
                 <div className="flex items-center gap-1">
                   <span className="text-blue-700 font-bold">◐</span>
                   <span className="text-amber-900">On Leave</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-red-700 font-bold">⊗</span>
+                  <span className="text-amber-900">Absent (LOP)</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <div className="w-4 h-4 bg-purple-200 border-2 border-purple-400 rounded"></div>

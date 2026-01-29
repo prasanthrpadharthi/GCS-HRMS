@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { Attendance } from "@/lib/types"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -25,7 +25,29 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
   const [selectedMonth, setSelectedMonth] = useState(initialMonth.toString())
   const [selectedYear, setSelectedYear] = useState(initialYear.toString())
   const [isLoading, setIsLoading] = useState(false)
+  const [holidays, setHolidays] = useState<string[]>([])
   const router = useRouter()
+  // Fetch holidays for the selected month
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      const year = parseInt(selectedYear)
+      const month = parseInt(selectedMonth)
+      const firstDay = new Date(year, month - 1, 1)
+      const lastDay = new Date(year, month, 0)
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from("holidays")
+          .select("holiday_date")
+          .gte("holiday_date", formatDateToString(firstDay))
+          .lte("holiday_date", formatDateToString(lastDay))
+        setHolidays((data || []).map((h: any) => h.holiday_date))
+      } catch (err) {
+        setHolidays([])
+      }
+    }
+    fetchHolidays()
+  }, [selectedMonth, selectedYear])
 
   const months = [
     { value: "1", label: "January" },
@@ -198,10 +220,37 @@ export function AdminAttendanceTable({ initialAttendance, initialMonth, initialY
           ) : (
             Object.entries(groupedAttendance).map(([userName, records]: [string, any]) => (
             <div key={userName} className="border border-amber-200 rounded-lg overflow-hidden bg-white">
-              <div className="bg-amber-100 px-4 py-3 border-b border-amber-200">
-                <h3 className="font-semibold text-amber-900">{userName}</h3>
-                <p className="text-sm text-amber-700">{records[0]?.user?.email}</p>
-              </div>
+              {/* High-level stats calculation */}
+              {(() => {
+                // Get all dates in the selected month, excluding weekends
+                const year = parseInt(selectedYear)
+                const month = parseInt(selectedMonth)
+                const daysInMonth = new Date(year, month, 0).getDate()
+                // Default weekends: Saturday, Sunday
+                const weekendDays = [6, 0] // 0 = Sunday, 6 = Saturday
+                const workingDates = Array.from({ length: daysInMonth }, (_, i) => {
+                  const d = new Date(year, month - 1, i + 1)
+                  return weekendDays.includes(d.getDay()) ? null : d.toISOString().split('T')[0]
+                }).filter(Boolean)
+                // Use global holidays for the month
+                const uniqueHolidayDates = holidays
+                // Present days: has clock_in
+                const presentDays = records.filter(r => r.clock_in).length
+                // Missing clock out: has clock_in but no clock_out
+                const missingClockOut = records.filter(r => r.clock_in && !r.clock_out).length
+                // Total working days: workingDates.length
+                return (
+                  <div className="bg-amber-100 px-4 py-3 border-b border-amber-200">
+                    <h3 className="font-semibold text-amber-900">
+                      {userName}
+                      <span className="ml-2 text-xs font-normal text-amber-700">
+                        [Working: {workingDates.length} | Holidays: {uniqueHolidayDates.length} | Present: {presentDays} | Missing Out: {missingClockOut}]
+                      </span>
+                    </h3>
+                    <p className="text-sm text-amber-700">{records[0]?.user?.email}</p>
+                  </div>
+                )
+              })()}
               <Table>
                 <TableHeader>
                   <TableRow className="bg-amber-50">
