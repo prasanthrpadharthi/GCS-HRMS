@@ -29,6 +29,7 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
   const [manualDate, setManualDate] = useState("")
   const [manualClockIn, setManualClockIn] = useState("")
   const [manualClockOut, setManualClockOut] = useState("")
+  const [isAutoFilled, setIsAutoFilled] = useState(false)
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [loadingHolidays, setLoadingHolidays] = useState(true)
   const router = useRouter()
@@ -95,6 +96,52 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
 
     fetchHolidays()
   }, [])
+
+  // Auto-fill clock-in time when date is selected in manual attendance dialog
+  useEffect(() => {
+    const fetchExistingAttendance = async () => {
+      if (!manualDate) {
+        setManualClockIn("")
+        setManualClockOut("")
+        setIsAutoFilled(false)
+        return
+      }
+
+      try {
+        const supabase = createClient()
+        const { data: existingAttendance } = await supabase
+          .from("attendance")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("date", manualDate)
+          .maybeSingle()
+
+        if (existingAttendance) {
+          // Auto-fill clock-in and clock-out times if they exist
+          // Format time to remove seconds (HH:MM:SS -> HH:MM)
+          if (existingAttendance.clock_in) {
+            const clockInFormatted = existingAttendance.clock_in.substring(0, 5)
+            setManualClockIn(clockInFormatted)
+          }
+          if (existingAttendance.clock_out) {
+            const clockOutFormatted = existingAttendance.clock_out.substring(0, 5)
+            setManualClockOut(clockOutFormatted)
+          }
+          setIsAutoFilled(true)
+        } else {
+          // Clear fields if no existing attendance
+          setManualClockIn("")
+          setManualClockOut("")
+          setIsAutoFilled(false)
+        }
+      } catch (err) {
+        console.error("Failed to fetch existing attendance:", err)
+        setIsAutoFilled(false)
+      }
+    }
+
+    fetchExistingAttendance()
+  }, [manualDate, userId])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -294,6 +341,7 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
       setManualDate("")
       setManualClockIn("")
       setManualClockOut("")
+      setIsAutoFilled(false)
       setIsManualDialogOpen(false)
       
       router.refresh()
@@ -367,14 +415,23 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
           </div>
 
           {!attendance.clock_out && (
-            <Button
-              onClick={handleClockOut}
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white h-14"
-            >
-              <Clock className="mr-2 h-5 w-5" />
-              {isLoading ? "Clocking Out..." : "Clock Out"}
-            </Button>
+            <>
+              {currentTime.getHours() >= 17 && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-center">
+                  <p className="text-sm text-amber-900 font-medium mb-2">
+                    💡 Ready to clock out? Quick option available!
+                  </p>
+                </div>
+              )}
+              <Button
+                onClick={handleClockOut}
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white h-14"
+              >
+                <Clock className="mr-2 h-5 w-5" />
+                {isLoading ? "Clocking Out..." : "Clock Out"}
+              </Button>
+            </>
           )}
 
           {attendance.clock_out && (
@@ -398,7 +455,7 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
           <DialogHeader>
             <DialogTitle>Mark Manual Attendance</DialogTitle>
             <DialogDescription>
-              Mark attendance for any day in the current or previous month
+              Mark attendance for any day in the current or previous month. If attendance exists for the selected date, times will be auto-filled.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -425,7 +482,13 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
 
             <div className="space-y-2">
               <Label htmlFor="clock-in">Clock In Time *</Label>
-              <Select value={manualClockIn} onValueChange={setManualClockIn}>
+              <Select 
+                value={manualClockIn} 
+                onValueChange={(value) => {
+                  setManualClockIn(value)
+                  setIsAutoFilled(false) // User is manually changing, so it's no longer auto-filled
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select clock in time" />
                 </SelectTrigger>
@@ -440,11 +503,22 @@ export function AttendanceMarker({ attendance, settings, userId, today }: Attend
                   })}
                 </SelectContent>
               </Select>
+              {isAutoFilled && manualClockIn && (
+                <p className="text-xs text-green-600">
+                  ℹ️ Time auto-filled from existing record. You can change it if needed.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="clock-out">Clock Out Time (Optional)</Label>
-              <Select value={manualClockOut} onValueChange={setManualClockOut}>
+              <Select 
+                value={manualClockOut} 
+                onValueChange={(value) => {
+                  setManualClockOut(value)
+                  setIsAutoFilled(false) // User is manually changing, so it's no longer auto-filled
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select clock out time" />
                 </SelectTrigger>
