@@ -604,7 +604,7 @@ export function AttendanceReportTable({
     doc.setFontSize(18)
     doc.setFont("helvetica", "bold")
     doc.setTextColor(37, 99, 235) // Blue color
-    doc.text("General Commercial Services", margin + 30, yPosition + 8)
+    doc.text("General Commercial Service", margin + 30, yPosition + 8)
 
     // Report title
     doc.setFontSize(14)
@@ -850,7 +850,7 @@ export function AttendanceReportTable({
       doc.setFontSize(18)
       doc.setFont("helvetica", "bold")
       doc.setTextColor(37, 99, 235) // Blue color
-      doc.text("General Commercial Services", margin + 30, yPosition + 8)
+      doc.text("General Commercial Service", margin + 30, yPosition + 8)
 
       // Report title
       doc.setFontSize(14)
