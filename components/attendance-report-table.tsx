@@ -720,7 +720,7 @@ export function AttendanceReportTable({
         }
 
         // Summary section at the bottom - increased height for better spacing
-        const summaryHeight = isAdmin ? 75 : 65
+        const summaryHeight = isAdmin ? 90 : 80
         doc.setDrawColor(37, 99, 235) // Blue border
         doc.setFillColor(249, 250, 251) // Light gray background
         doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, summaryHeight, 2, 2, "FD")
