@@ -110,6 +110,14 @@ export function AttendanceReportTable({
     return monthlySalary / workingDays
   }
 
+  // Get work hours per day based on employment type
+  const getWorkHoursPerDay = (employmentType?: string): number => {
+    return employmentType === "part_time" ? 4.25 : 8.5
+  }
+
+  // Maximum work hours that can be counted per day for calculations
+  const MAX_WORK_HOURS_PER_DAY = 8.5
+
   const fetchReportData = async () => {
     setIsLoading(true)
 
@@ -248,38 +256,48 @@ export function AttendanceReportTable({
           }
         })
         
+        // Get work hours per day based on employment type
+        const workHoursPerDay = getWorkHoursPerDay(user.employment_type)
+
         // Calculate total hours worked (excluding 1 hour lunch break per day)
-        // For paid leaves: Add 8.5 hours for full day, or remaining hours for half day
-        // For holidays: Add 8.5 hours by default
+        // For paid leaves: Add work hours per day for full day, or remaining hours for half day
+        // For holidays: Add work hours per day by default
+        // Maximum work hours counted per day is capped at 8.5 hours
         let totalHoursWorked = 0
         let deficitHours = 0
         let paidLeaveHours = 0
-        
+
         if (attendance) {
           attendance.forEach((record) => {
             if (record.clock_in && record.clock_out && record.status === "present") {
               const clockIn = new Date(`${record.date}T${record.clock_in}`)
               const clockOut = new Date(`${record.date}T${record.clock_out}`)
               const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-              
+
               // Check if there's a half-day paid leave on this date
               const leaveInfo = leavesByDate.get(record.date)
               const isHalfDayLeave = leaveInfo && !leaveInfo.isFullDay
-              
+
               // Don't deduct lunch if hours ≤ 5 or half-day leave scenario
               const shouldDeductLunch = hoursWorked > 5 && !isHalfDayLeave
-              const netHours = shouldDeductLunch ? Math.max(0, hoursWorked - 1) : hoursWorked
-              
+              let netHours = shouldDeductLunch ? Math.max(0, hoursWorked - 1) : hoursWorked
+
+              // Cap daily hours at maximum (8.5 hours) for calculation
+              netHours = Math.min(netHours, MAX_WORK_HOURS_PER_DAY)
+
+              // Round to 2 decimal places to avoid floating-point precision issues
+              netHours = Math.round(netHours * 100) / 100
+
               if (leaveInfo && leaveInfo.isPaid && !leaveInfo.isFullDay) {
-                // Half day paid leave - add remaining hours to reach 8.5
-                const remainingHours = Math.max(0, 8.5 - netHours)
+                // Half day paid leave - add remaining hours to reach work hours per day
+                const remainingHours = Math.max(0, workHoursPerDay - netHours)
                 paidLeaveHours += remainingHours
                 totalHoursWorked += netHours + remainingHours
               } else {
                 totalHoursWorked += netHours
-                
-                // Calculate deficit for this day (8.5 expected - actual hours)
-                const dayDeficit = 8.5 - netHours
+
+                // Calculate deficit for this day (work hours per day expected - actual hours)
+                const dayDeficit = workHoursPerDay - netHours
                 if (dayDeficit > 0) {
                   deficitHours += dayDeficit
                 }
@@ -288,59 +306,66 @@ export function AttendanceReportTable({
           })
         }
         
-        // Add full day paid leaves as 8.5 hours each
+        // Add full day paid leaves based on work hours per day
         leaves?.forEach((leave) => {
           const isPaid = leave.leave_type?.is_paid || false
-          
+
           if (isPaid) {
             const fromDate = new Date(leave.from_date)
             const toDate = new Date(leave.to_date)
             const currentDate = new Date(fromDate)
-            
+
             while (currentDate <= toDate) {
               const dateString = formatDateToString(currentDate)
               const dayName = currentDate.toLocaleDateString("en-US", { weekday: "long" })
-              
+
               // Skip weekends
               if (!weekendDays.includes(dayName)) {
                 const leaveInfo = leavesByDate.get(dateString)
-                
+
                 // Only count if it's a full day leave AND there's no attendance record for this date
                 const hasAttendance = attendance?.some(a => a.date === dateString)
-                
+
                 if (leaveInfo && leaveInfo.isFullDay && !hasAttendance) {
-                  paidLeaveHours += 8.5
-                  totalHoursWorked += 8.5
+                  paidLeaveHours += workHoursPerDay
+                  totalHoursWorked += workHoursPerDay
                 }
               }
-              
+
               currentDate.setDate(currentDate.getDate() + 1)
             }
           }
         })
-        
-        // Add holidays as full day present (8.5 hours) by default
+
+        // Add holidays as full day present based on work hours per day
         holidays.forEach((holiday) => {
           const holidayDate = holiday.holiday_date
           const holidayDateObj = new Date(holidayDate)
           const dayName = holidayDateObj.toLocaleDateString("en-US", { weekday: "long" })
-          
+
           // Skip if it's already a weekend
           if (!weekendDays.includes(dayName)) {
             // Only count if there's no attendance record and no leave record for this date
             const hasAttendance = attendance?.some(a => a.date === holidayDate)
             const hasLeave = leavesByDate.has(holidayDate)
-            
+
             if (!hasAttendance && !hasLeave) {
-              // Count holiday as full day present (8.5 hours) for payroll purposes
-              totalHoursWorked += 8.5
-              paidLeaveHours += 8.5
+              // Count holiday as full day present based on work hours per day
+              // Cap at maximum 8.5 hours
+              const holidayHours = Math.min(workHoursPerDay, MAX_WORK_HOURS_PER_DAY)
+              totalHoursWorked += holidayHours
+              paidLeaveHours += holidayHours
             }
           }
         })
-        
+
+        // Round total hours worked to 2 decimal places to avoid floating-point accumulation issues
+        totalHoursWorked = Math.round(totalHoursWorked * 100) / 100
+
         // Calculate effective days (total hours / 8.5 hours per day)
-        const effectiveDays = totalHoursWorked > 0 ? totalHoursWorked / 8.5 : 0
+        // Effective days is always calculated based on standard 8.5 hours for salary calculation
+        // Round to 2 decimal places to avoid floating-point precision issues
+        const effectiveDays = totalHoursWorked > 0 ? Math.round((totalHoursWorked / 8.5) * 100) / 100 : 0
         
         // Calculate total leave days excluding weekends (for display purposes)
         let totalLeaveDays = 0
@@ -401,15 +426,20 @@ export function AttendanceReportTable({
           // Total hours already includes paid leave hours adjustment
           // Salary = Effective Days × Daily rate
           calculatedSalary = effectiveDays * salaryPerDay
+
+          // Round to 2 decimal places (cents) to avoid floating-point precision issues
+          calculatedSalary = Math.round(calculatedSalary * 100) / 100
         }
 
         // Calculate overtime pay (1.5x hourly rate)
+        // Hourly rate is calculated based on standard 8.5 hours (not employment type)
+        // This ensures consistent overtime calculations regardless of employment type
         let overtimePay = 0
         if (user.salary && overtimes && overtimes.length > 0) {
           const salaryPerDay = calculateSalaryPerDay(user.salary, workingDays)
-          const hourlyRate = salaryPerDay / 8.5
+          const hourlyRate = salaryPerDay / 8.5 // Standard 8.5 hours for hourly rate
           const overtimeHourlyRate = hourlyRate * 1.5
-          
+
           overtimes.forEach((ot) => {
             overtimePay += overtimeHourlyRate * ot.hours_worked
           })
@@ -444,7 +474,8 @@ export function AttendanceReportTable({
 
           if (isHoliday && holiday) {
             status = "Holiday"
-            totalHours = 8.5
+            // Holiday hours based on work hours per day, capped at 8.5
+            totalHours = Math.min(workHoursPerDay, MAX_WORK_HOURS_PER_DAY)
           } else if (isWeekend) {
             status = "Weekend"
           } else if (overtime && isOvertime) {
@@ -464,10 +495,18 @@ export function AttendanceReportTable({
               const isHalfDayLeave = leaveInfo && !leaveInfo.isFullDay
               const shouldDeductLunch = hoursWorked > 5 && !isHalfDayLeave
               totalHours = shouldDeductLunch ? Math.max(0, hoursWorked - 1) : hoursWorked
+
+              // Cap at maximum 8.5 hours for daily calculation
+              totalHours = Math.min(totalHours, MAX_WORK_HOURS_PER_DAY)
+
+              // Round to 2 decimal places to avoid floating-point precision issues
+              totalHours = Math.round(totalHours * 100) / 100
+
               status = "Present"
             } else if (leaveInfo) {
               status = leaveInfo.isPaid ? "Paid Leave" : "Unpaid Leave"
-              totalHours = leaveInfo.isPaid ? 8.5 : 0
+              // Leave hours based on work hours per day, capped at 8.5
+              totalHours = leaveInfo.isPaid ? Math.min(workHoursPerDay, MAX_WORK_HOURS_PER_DAY) : 0
             } else {
               status = "Absent"
             }

@@ -28,6 +28,10 @@ interface OvertimeWithUser extends Overtime {
   user?: User
 }
 
+// Standard work hours for overtime hourly rate calculation
+// Use 8.5 hours consistently for all employees regardless of employment type
+const STANDARD_WORK_HOURS = 8.5
+
 export function AdminOvertimeReports() {
   const [overtimes, setOvertimes] = useState<OvertimeWithUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,6 +67,7 @@ export function AdminOvertimeReports() {
             email,
             full_name,
             role,
+            employment_type,
             salary,
             must_change_password,
             email_verified,
@@ -169,13 +174,13 @@ export function AdminOvertimeReports() {
       totalHours[userName] = (totalHours[userName] || 0) + ot.hours_worked
       
       // Calculate overtime pay: 1.5x hourly rate
-      // Monthly salary / working days (excl. weekends) / 8.5 hours per day = hourly rate
+      // Hourly rate = Daily rate / 8.5 hours (standard for all employees)
       if (ot.user?.salary && ot.status === "approved") {
         const date = new Date(ot.overtime_date)
         const month = date.getMonth() + 1
         const year = date.getFullYear()
         const daysInMonth = new Date(year, month, 0).getDate()
-        
+
         // Calculate working days (excluding weekends - Saturday and Sunday)
         let workingDaysInMonth = 0
         for (let day = 1; day <= daysInMonth; day++) {
@@ -184,8 +189,9 @@ export function AdminOvertimeReports() {
             workingDaysInMonth++
           }
         }
-        
-        const hourlyRate = ot.user.salary / workingDaysInMonth / 8.5
+
+        const dailyRate = ot.user.salary / workingDaysInMonth
+        const hourlyRate = dailyRate / STANDARD_WORK_HOURS // Standard 8.5 hours
         const overtimeHourlyRate = hourlyRate * 1.5 // 1.5x multiplier
         const pay = overtimeHourlyRate * ot.hours_worked
         overtimePay[userName] = (overtimePay[userName] || 0) + pay
@@ -231,7 +237,7 @@ export function AdminOvertimeReports() {
       const month = date.getMonth() + 1
       const year = date.getFullYear()
       const daysInMonth = new Date(year, month, 0).getDate()
-      
+
       // Calculate working days (excluding weekends)
       let workingDaysInMonth = 0
       for (let day = 1; day <= daysInMonth; day++) {
@@ -240,8 +246,9 @@ export function AdminOvertimeReports() {
           workingDaysInMonth++
         }
       }
-      
-      const hourlyRate = ot.user.salary / workingDaysInMonth / 8.5
+
+      const dailyRate = ot.user.salary / workingDaysInMonth
+      const hourlyRate = dailyRate / STANDARD_WORK_HOURS // Standard 8.5 hours
       const overtimeHourlyRate = hourlyRate * 1.5
       return sum + (overtimeHourlyRate * ot.hours_worked)
     }
@@ -506,7 +513,8 @@ export function AdminOvertimeReports() {
                   {filteredOvertimes.map((ot) => {
                     let overtimePay = 0
                     if (ot.user?.salary && ot.status === "approved") {
-                      const hourlyRate = ot.user.salary / 22 / 8.5
+                      const dailyRate = ot.user.salary / 22 // Average working days
+                      const hourlyRate = dailyRate / STANDARD_WORK_HOURS // Standard 8.5 hours
                       const overtimeHourlyRate = hourlyRate * 1.5
                       overtimePay = overtimeHourlyRate * ot.hours_worked
                     }
