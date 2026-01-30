@@ -6,6 +6,7 @@ import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { updateUserByAdmin } from "@/app/actions/update-user"
 import { verifyUserEmail } from "@/app/actions/verify-email"
+import { resetUserPassword } from "@/app/actions/reset-password"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -19,7 +20,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Trash2, Edit, CheckCircle } from "lucide-react"
+import { Plus, Trash2, Edit, CheckCircle, Key } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAlert } from "@/components/ui/alert-custom"
 import type { User } from "@/lib/types"
@@ -173,7 +174,7 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
 
   const handleVerifyEmail = async (userId: string) => {
     const confirmed = await showConfirm(
-      "Verify User Email", 
+      "Verify User Email",
       "Are you sure you want to manually verify this user's email? This will allow them to access the system."
     )
     if (!confirmed) return
@@ -188,6 +189,27 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
 
       await showAlert("Success", "User email has been verified successfully.")
       router.refresh()
+    } catch (error: unknown) {
+      await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
+    }
+  }
+
+  const handleResetPassword = async (userId: string, userName: string) => {
+    const confirmed = await showConfirm(
+      "Reset User Password",
+      `Are you sure you want to reset ${userName}'s password to the default password "gcs@123"? The user will need to change their password on next login.`
+    )
+    if (!confirmed) return
+
+    try {
+      // Call server action to reset password using admin API
+      const result = await resetUserPassword(userId)
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to reset password")
+      }
+
+      await showAlert("Success", result.message || "Password has been reset to default: gcs@123")
     } catch (error: unknown) {
       await showAlert("Error", error instanceof Error ? error.message : "An error occurred")
     }
@@ -491,8 +513,18 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
                     <Button
                       variant="ghost"
                       size="icon"
+                      onClick={() => handleResetPassword(user.id, user.full_name)}
+                      className="hover:bg-blue-100 text-blue-600"
+                      title="Reset Password"
+                    >
+                      <Key className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => openEditDialog(user)}
                       className="hover:bg-amber-100 text-amber-700"
+                      title="Edit User"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -501,6 +533,7 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
                       size="icon"
                       onClick={() => handleDeleteUser(user.id)}
                       className="hover:bg-red-100 text-red-600"
+                      title="Delete User"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
