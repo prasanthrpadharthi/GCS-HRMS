@@ -610,7 +610,7 @@ export function AttendanceReportTable({
     doc.setFontSize(14)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(0, 0, 0)
-    doc.text(`Attendance Report - ${monthName} ${selectedYear}`, margin, yPosition + 20)
+    doc.text(`Attendance Report - ${monthName} ${selectedYear}`, margin + 40, yPosition + 20)
 
     yPosition += 35
 
@@ -625,7 +625,7 @@ export function AttendanceReportTable({
       // Employee details section
       doc.setDrawColor(200, 200, 200)
       doc.setFillColor(245, 245, 245)
-      const detailsBoxHeight = isAdmin ? 25 : 18
+      const detailsBoxHeight = isAdmin ? 35 : 28
       doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, detailsBoxHeight, 2, 2, "FD")
 
       yPosition += 8
