@@ -43,6 +43,8 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
     email: "",
     full_name: "",
     role: "user" as "admin" | "user",
+    employment_type: "full_time" as "full_time" | "part_time",
+    work_pass_type: "singaporean" as "singaporean" | "pr" | "ep" | "wp",
     salary: "",
     password: "",
   })
@@ -52,6 +54,8 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
       email: "",
       full_name: "",
       role: "user",
+      employment_type: "full_time",
+      work_pass_type: "singaporean",
       salary: "",
       password: "",
     })
@@ -74,6 +78,8 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
           data: {
             full_name: formData.full_name,
             role: formData.role,
+            employment_type: formData.employment_type,
+            work_pass_type: formData.work_pass_type,
             must_change_password: true,
           },
           emailRedirectTo: `${window.location.origin}/auth/change-password`,
@@ -87,17 +93,28 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
       if (authData.user) {
         // Verify email immediately using server action
         const verifyResult = await verifyUserEmail(authData.user.id)
-        
+
         if (!verifyResult.success) {
           console.warn("Failed to auto-verify email:", verifyResult.error)
           // Don't fail the user creation, just log the warning
         }
 
-        // Update salary if provided
+        // Update salary and other fields
+        const updateData: any = {}
         if (formData.salary) {
+          updateData.salary = Number.parseFloat(formData.salary)
+        }
+        if (formData.employment_type) {
+          updateData.employment_type = formData.employment_type
+        }
+        if (formData.work_pass_type) {
+          updateData.work_pass_type = formData.work_pass_type
+        }
+
+        if (Object.keys(updateData).length > 0) {
           const { error: updateError } = await supabase
             .from("users")
-            .update({ salary: Number.parseFloat(formData.salary) })
+            .update(updateData)
             .eq("id", authData.user.id)
 
           if (updateError) throw updateError
@@ -128,6 +145,8 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
       const updateData: Partial<User> = {
         full_name: formData.full_name,
         role: formData.role,
+        employment_type: formData.employment_type,
+        work_pass_type: formData.work_pass_type,
       }
 
       if (formData.salary) {
@@ -221,6 +240,8 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
       email: user.email,
       full_name: user.full_name,
       role: user.role,
+      employment_type: user.employment_type || "full_time",
+      work_pass_type: user.work_pass_type || "singaporean",
       salary: user.salary?.toString() || "",
       password: "",
     })
@@ -341,6 +362,42 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="employment_type" className="text-amber-900">
+                  Employment Type
+                </Label>
+                <Select
+                  value={formData.employment_type}
+                  onValueChange={(value) => setFormData({ ...formData, employment_type: value as "full_time" | "part_time" })}
+                >
+                  <SelectTrigger className="border-amber-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full_time">Full Time (8.5 hrs/day)</SelectItem>
+                    <SelectItem value="part_time">Part Time (4.25 hrs/day)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="work_pass_type" className="text-amber-900">
+                  Work Pass Type
+                </Label>
+                <Select
+                  value={formData.work_pass_type}
+                  onValueChange={(value) => setFormData({ ...formData, work_pass_type: value as "singaporean" | "pr" | "ep" | "wp" })}
+                >
+                  <SelectTrigger className="border-amber-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="singaporean">Singaporean</SelectItem>
+                    <SelectItem value="pr">PR (Permanent Resident)</SelectItem>
+                    <SelectItem value="ep">EP (Employment Pass)</SelectItem>
+                    <SelectItem value="wp">WP (Work Permit)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="salary" className="text-amber-900">
                   Monthly Salary (SGD) (Optional)
                 </Label>
@@ -427,6 +484,42 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="edit-employment_type" className="text-amber-900">
+                Employment Type
+              </Label>
+              <Select
+                value={formData.employment_type}
+                onValueChange={(value) => setFormData({ ...formData, employment_type: value as "full_time" | "part_time" })}
+              >
+                <SelectTrigger className="border-amber-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full_time">Full Time (8.5 hrs/day)</SelectItem>
+                  <SelectItem value="part_time">Part Time (4.25 hrs/day)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-work_pass_type" className="text-amber-900">
+                Work Pass Type
+              </Label>
+              <Select
+                value={formData.work_pass_type}
+                onValueChange={(value) => setFormData({ ...formData, work_pass_type: value as "singaporean" | "pr" | "ep" | "wp" })}
+              >
+                <SelectTrigger className="border-amber-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="singaporean">Singaporean</SelectItem>
+                  <SelectItem value="pr">PR (Permanent Resident)</SelectItem>
+                  <SelectItem value="ep">EP (Employment Pass)</SelectItem>
+                  <SelectItem value="wp">WP (Work Permit)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-salary" className="text-amber-900">
                 Monthly Salary (SGD)
               </Label>
@@ -473,6 +566,8 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
               <TableHead className="text-amber-900">Name</TableHead>
               <TableHead className="text-amber-900">Email</TableHead>
               <TableHead className="text-amber-900">Role</TableHead>
+              <TableHead className="text-amber-900">Employment</TableHead>
+              <TableHead className="text-amber-900">Work Pass</TableHead>
               <TableHead className="text-amber-900">Salary (SGD)</TableHead>
               <TableHead className="text-amber-900">Email Status</TableHead>
               <TableHead className="text-amber-900 text-right">Actions</TableHead>
@@ -481,7 +576,7 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-amber-700">
+                <TableCell colSpan={8} className="text-center py-8 text-amber-700">
                   No users found
                 </TableCell>
               </TableRow>
@@ -491,6 +586,15 @@ export function UserManagementTable({ users }: UserManagementTableProps) {
                 <TableCell className="font-medium text-amber-900">{user.full_name}</TableCell>
                 <TableCell className="text-amber-700">{user.email}</TableCell>
                 <TableCell className="text-amber-700 capitalize">{user.role}</TableCell>
+                <TableCell className="text-amber-700 capitalize">
+                  {user.employment_type === "full_time" ? "Full Time" : "Part Time"}
+                </TableCell>
+                <TableCell className="text-amber-700">
+                  {user.work_pass_type === "singaporean" ? "Singaporean" :
+                   user.work_pass_type === "pr" ? "PR" :
+                   user.work_pass_type === "ep" ? "EP" :
+                   user.work_pass_type === "wp" ? "WP" : "-"}
+                </TableCell>
                 <TableCell className="text-amber-700">{user.salary ? `$${user.salary.toFixed(2)}` : "-"}</TableCell>
                 <TableCell>
                   {user.email_verified ? (

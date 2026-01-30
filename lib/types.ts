@@ -1,10 +1,14 @@
 export type UserRole = "admin" | "user"
+export type EmploymentType = "full_time" | "part_time"
+export type WorkPassType = "singaporean" | "pr" | "ep" | "wp"
 
 export interface User {
   id: string
   email: string
   full_name: string
   role: UserRole
+  employment_type?: EmploymentType
+  work_pass_type?: WorkPassType
   salary?: number
   must_change_password: boolean
   email_verified: boolean
