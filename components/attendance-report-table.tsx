@@ -365,7 +365,7 @@ export function AttendanceReportTable({
         // Calculate effective days (total hours / 8.5 hours per day)
         // Effective days is always calculated based on standard 8.5 hours for salary calculation
         // Round to 2 decimal places to avoid floating-point precision issues
-        const effectiveDays = totalHoursWorked > 0 ? Math.round((totalHoursWorked / 8.5) * 100) / 100 : 0
+        const effectiveDays = totalHoursWorked > 0 ? (totalHoursWorked / 8.5) : 0
         
         // Calculate total leave days excluding weekends (for display purposes)
         let totalLeaveDays = 0
